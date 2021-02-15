@@ -41,9 +41,58 @@ actions (each action corresponding to a transaction):
 2. Increase the collateral. This can be after the equivalent of a "margin call" is issued and the owner must increase his/her collateral to avoid entering the red zone (marked by the liquidation ratio (see [governance](./governance.md))
 3. Buy more tokens. Expand the position by buying more tokens on margin.
 
+## State
+
+Margin has a single account struct as state. 
+
+```rust
+#[account]
+pub struct MarginAccount {
+    /// The owner of this Vesting account.
+    pub trader: Pubkey,
+    /// The mint of the SPL token locked up.
+    pub mint: Pubkey,
+    /// Address of the account's token vault.
+    pub vault: Pubkey,
+    /// The owner of the token account funding this account.
+    pub grantor: Pubkey,
+    /// The starting balance of this vesting account, i.e., how much was
+    /// originally deposited.
+    pub initial_balance: u64,
+    /// Signer nonce.
+    pub nonce: u8,
+    /// Check if there is an open trade
+    pub open_trade: bool,
+}
+```
+
 ## Messages
 
-The margin contract defines 5 messages, three of which can only be accessed by the trader. 
+The margin contract defines 5 messages, four of which can only be accessed by the trader. 
+
+### CreateAccount
+
+CreateAccount creates a margin account on behalf of the caller.
+
+```rust
+#[derive(Accounts)]
+pub struct CreateAccount<'info> {
+    #[account(signer)]
+    authority: AccountInfo<'info>,
+    // Authority (trader)
+    #[account(signer)]
+    authority: AccountInfo<'info>,
+    // Coordinator address
+    coordinator: AccountInfo<'info>,
+    #[account(mut)]
+    vault: CpiAccount<'info, TokenAccount>,
+    // Misc.
+    #[account("token_program.key == &token::ID")]
+    token_program: AccountInfo<'info>,
+    clock: Sysvar<'info, Clock>,
+    rent: Sysvar<'info, Rent>,
+}
+```
 
 ### Deposit
 
@@ -54,7 +103,18 @@ Deposit deposits funds into a program account to be used for trading. Once a tra
 ```rust
 #[derive(Accounts)]
 pub struct Deposit<'info> {
-
+    // Depositor
+    depositor: AccountInfo<'info>,
+    // Authority (trader)
+    #[account(signer)]
+    depositor_authority: AccountInfo<'info>,
+    // Coordinator address
+    coordinator: AccountInfo<'info>,
+    #[account(mut)]
+    vault: CpiAccount<'info, TokenAccount>,
+    // Misc.
+    #[account("token_program.key == &token::ID")]
+    token_program: AccountInfo<'info>,
 }
 ```
 
@@ -67,7 +127,18 @@ Withdraw withdraws the funds from the account. Withdraw can only be called if th
 ```rust
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
-
+    // Depositor
+    depositor: AccountInfo<'info>,
+    // Authority (trader)
+    #[account(signer)]
+    depositor_authority: AccountInfo<'info>,
+    // Coordinator address
+    coordinator: AccountInfo<'info>,
+    #[account(mut)]
+    vault: CpiAccount<'info, TokenAccount>,
+    // Misc.
+    #[account("token_program.key == &token::ID")]
+    token_program: AccountInfo<'info>,
 }
 ```
 
@@ -109,5 +180,3 @@ pub struct Deleverage<'info> {
 
 }
 ```
-
-## State
