@@ -10,4 +10,4 @@ The inflation rate of the protocol represents the rate at which new native token
 
 ## Staking
 
-Staking will be provided by the registry contract. (https://github.com/project-serum/anchor/tree/master/examples/lockup/programs/registry)
+Staking will be provided by the registry contract. (https://github.com/project-serum/anchor/tree/master/examples/lockup/programs/registry).
