@@ -41,3 +41,73 @@ actions (each action corresponding to a transaction):
 2. Increase the collateral. This can be after the equivalent of a "margin call" is issued and the owner must increase his/her collateral to avoid entering the red zone (marked by the liquidation ratio (see [governance](./governance.md))
 3. Buy more tokens. Expand the position by buying more tokens on margin.
 
+## Messages
+
+The margin contract defines 5 messages, three of which can only be accessed by the trader. 
+
+### Deposit
+
+Deposit deposits funds into a program account to be used for trading. Once a trade is initiated, deposits can still be made. 
+
+- Can only be called by the trader.
+
+```rust
+#[derive(Accounts)]
+pub struct Deposit<'info> {
+
+}
+```
+
+### Withdraw
+
+Withdraw withdraws the funds from the account. Withdraw can only be called if there are no open trades. 
+
+- Withdraw can only be called by the trader. 
+
+```rust
+#[derive(Accounts)]
+pub struct Withdraw<'info> {
+
+}
+```
+
+### Trade
+
+Trade does multiple things in a single step. When a user would like conduct a trade they will specify the amount of margin and total trade they would like to conduct. The program will check that there are enough funds in the margin account and check if there are enough funds in the lending pool. If there are enough funds the loan will be taken and the trade executed. At this point the margin account has been marked as having a open trade. At this point no withdraws can be made. When a user sells their position or part of the position the funds are repaid to the lending protocol, after this, what is left over is considered the amount the user has to withdraw. 
+
+- Trade can only be called by the trader
+
+```rust
+#[derive(Accounts)]
+pub struct Trade<'info> {
+
+}
+```
+
+### Liquidate
+
+Liquidate is only performed when an account has hit their liquidation limit. This message tries to close the current position as fast as possible. It may need to place multiple trades based on liquidity of markets
+
+
+```rust
+#[derive(Accounts)]
+pub struct Liquidate<'info> {
+
+}
+```
+
+- Liquidate can only be called by a coordinator. 
+
+
+### Deleverage
+
+Deleveraging is the act of lowering the amount of leverage. When a traders account hits threshold, defined by governance, a coordinator has the right to deleverage the account by another predefined percentage. 
+
+```rust
+#[derive(Accounts)]
+pub struct Deleverage<'info> {
+
+}
+```
+
+## State

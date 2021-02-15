@@ -28,3 +28,54 @@ The parameters of the protocol are:
 
 - Inflation
   - Inflation represents the amount of tokens to be minted for staking the native token. This number can vary from 0%-100%.
+
+
+## Messages
+
+Messages define the state transitions a contract can make. 
+
+### ParamChangeProposal
+
+ParamChangeProposal changes a predefined parameter. Some of the params may be an array in which case the proposals will add or delete items from the list. 
+
+```rust
+#[derive(Accounts)]
+pub struct ParamChangeProposal<'info> {
+
+}
+```
+
+
+
+### SpendProposal
+
+SpendProposal makes a proposal for spending part of or the whole community pool.
+
+```rust
+#[derive(Accounts)]
+pub struct SpendProposal<'info> {
+
+}
+```
+
+### VoteOnProposal
+
+VoteOnProposal conducts a vote on behalf of a staker. A staker can only vote once on a proposal. There entire stake will be counted as a vote. 
+
+```rust
+#[derive(Accounts)]
+pub struct VoteOnProposal<'info> {
+
+}
+```
+
+## State
+
+The state of the governance contract should be minimal and only hold the current proposals. 
+
+```
+  #[state]
+pub struct Governance {
+
+}
+```
