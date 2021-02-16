@@ -1,4 +1,8 @@
-# Entropy
+<div align="center">
+
+![entropy image](entropy.jpg)
+
+</div>
 
 A Margin Trading Protocol on Solana.
 
