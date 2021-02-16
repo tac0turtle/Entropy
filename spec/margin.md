@@ -54,8 +54,8 @@ pub struct MarginAccount {
     pub mint: Pubkey,
     /// Address of the account's token vault.
     pub vault: Pubkey,
-    /// The owner of the token account funding this account.
-    pub grantor: Pubkey,
+    /// Coordinator has the write to call functions within this program
+    pub coordinator: Pubkey,
     /// The starting balance of this vesting account, i.e., how much was
     /// originally deposited.
     pub initial_balance: u64,
@@ -159,6 +159,7 @@ pub struct Trade<'info> {
 
 Liquidate is only performed when an account has hit their liquidation limit. This message tries to close the current position as fast as possible. It may need to place multiple trades based on liquidity of markets
 
+- Liquidate can only be called by a coordinator. 
 
 ```rust
 #[derive(Accounts)]
@@ -167,12 +168,13 @@ pub struct Liquidate<'info> {
 }
 ```
 
-- Liquidate can only be called by a coordinator. 
 
 
 ### Deleverage
 
 Deleveraging is the act of lowering the amount of leverage. When a traders account hits threshold, defined by governance, a coordinator has the right to deleverage the account by another predefined percentage. 
+
+- Deleverage can only be called by the coordinator.
 
 ```rust
 #[derive(Accounts)]
