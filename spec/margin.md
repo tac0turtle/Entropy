@@ -182,3 +182,14 @@ pub struct Deleverage<'info> {
 
 }
 ```
+
+## Cross program interactions
+
+The margin account contract makes a few cross program calls. To start the margin account has the right to take non-backed loans, and make trades on the Serum Dex. 
+
+1. The first cross chain program interaction is in the creation of the margin account. When a margin account is created it needs to be registered within the lending protocol to enable non-backed loans. The
+
+2. Secondly, when a leveraged trade is initiated, the margin account will make a request to the lending contract requesting funds to allow a leveraged trade. 
+   1. When the user makes the trade the liquidation price, loan interest rate and fees are known already. The interest rate is fixed rate that is charged entirely, even if the trade is opened for a minute. 
+
+3. Thirdly, when the margin account has taken the loan it will execute the trade against the serum dex.

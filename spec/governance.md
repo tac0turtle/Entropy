@@ -8,9 +8,6 @@ Governance controls the risk parameters of the protocol and which pairs a user c
 
 The parameters of the protocol are:
 
-- C-ratio (Collateral Ratio)
-  - The collateral ratio of loans controls how much a user must put in for a loan. At the start it will be set to 175%, as the protocol matures it will be lowered.
-
 - Lending pools
   - Lending pools represents which pools are available to lend and borrow from. Lending pools are created via governance.
 
@@ -28,6 +25,40 @@ The parameters of the protocol are:
 
 - Inflation
   - Inflation represents the amount of tokens to be minted for staking the native token. This number can vary from 0%-100%.
+
+### State 
+
+Params represents various parameters the protocol can change
+```rust
+#[Account]
+pub struct Params {
+  /// leverage states the amount of leverage a trader can take
+  pub leverage: u8,
+  /// pools are the lending pools that are created
+  pub pools: vec<PubKey>,
+  /// pairs represents trading pairs available for leveraged trading
+  pub pairs: vec<PubKey>
+  /// fees represent the amount of fees charged to a user of the platform
+  pub fees: u8,
+  ///
+}
+```
+
+Pool represent the parameters of a lending pool.
+
+```rust
+#[Account]
+pub struct Pool {
+  /// pool represents the pool these parameters apply to
+  pub pool: PubKey,
+  /// c_ratio represents the collateral required for a loan
+  pub c_ratio: u8,
+  /// borrow tells the user if the reserve is available to be borrowed
+  pub borrow: bool,
+  /// 
+}
+```
+
 
 
 ## Messages
@@ -65,17 +96,6 @@ VoteOnProposal conducts a vote on behalf of a staker. A staker can only vote onc
 ```rust
 #[derive(Accounts)]
 pub struct VoteOnProposal<'info> {
-
-}
-```
-
-## State
-
-The state of the governance contract should be minimal and only hold the current proposals. 
-
-```
-  #[state]
-pub struct Governance {
 
 }
 ```
