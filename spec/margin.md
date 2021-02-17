@@ -50,15 +50,8 @@ Margin has a single account struct as state.
 pub struct MarginAccount {
     /// The owner of this Vesting account.
     pub trader: Pubkey,
-    /// The mint of the SPL token locked up.
-    pub mint: Pubkey,
     /// Address of the account's token vault.
     pub vault: Pubkey,
-    /// Coordinator has the write to call functions within this program
-    pub coordinator: Pubkey,
-    /// The starting balance of this vesting account, i.e., how much was
-    /// originally deposited.
-    pub initial_balance: u64,
     /// Signer nonce.
     pub nonce: u8,
     /// Check if there is an open trade
@@ -82,8 +75,6 @@ pub struct CreateAccount<'info> {
     // Authority (trader)
     #[account(signer)]
     authority: AccountInfo<'info>,
-    // Coordinator address
-    coordinator: AccountInfo<'info>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
     // Misc.
@@ -108,8 +99,6 @@ pub struct Deposit<'info> {
     // Authority (trader)
     #[account(signer)]
     depositor_authority: AccountInfo<'info>,
-    // Coordinator address
-    coordinator: AccountInfo<'info>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
     // Misc.
@@ -132,8 +121,6 @@ pub struct Withdraw<'info> {
     // Authority (trader)
     #[account(signer)]
     depositor_authority: AccountInfo<'info>,
-    // Coordinator address
-    coordinator: AccountInfo<'info>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
     // Misc.
