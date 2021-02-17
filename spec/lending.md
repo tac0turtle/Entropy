@@ -26,7 +26,7 @@ Lastly, points of crisis are when lenders try to withdraw more money than is cur
 
 The basics of the protocol can be furthered by a set of possible advanced features:
 
-- **Lending epochs:** To avoid hight volatility in the reserve pool, tokens that are lent could only be withdrawn at prescribed intervals or epochs. This would break the withdraw call into two calls: First, an intention to withdraw which would then set a time in the future with which the tokens become unlocked; Second, the actual withdrawal of tokens so long as the call is made after the tokens are unlocked. 
+- **Lending epochs:** To avoid high volatility in the reserve pool, tokens that are lent could only be withdrawn at prescribed intervals or epochs. This would break the withdraw call into two calls: First, an intention to withdraw which would then set a time in the future with which the tokens become unlocked; Second, the actual withdrawal of tokens so long as the call is made after the tokens are unlocked. 
 
 - **Deposit Rate Limiting:** Another feature to combat high volatility is to set a ratio with which funds can be deposited or withdrawn. As an example, every epoch only 10% of the total liquidity in the reserve can be exchanged. This could also be applied to borrowing.
 
