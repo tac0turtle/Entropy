@@ -30,6 +30,9 @@ The basics of the protocol can be furthered by a set of possible advanced featur
 
 - **Deposit Rate Limiting:** Another feature to combat high volatility is to set a ratio with which funds can be deposited or withdrawn. As an example, every epoch only 10% of the total liquidity in the reserve can be exchanged. This could also be applied to borrowing.
 
+- **Variable Borrowing Rate:** Currently the protocol charges a fixed interest rate to borrowers because less overhead is required and it is expected that most
+borrowers prefer a fixed interest rate. If a reserve were to keep track of the interest rate changes over time then it could be easier to calculate accrued interest over the loan period and thus use variable rates. Variable rates offer better sensitivity to changes in utilization rate. We could further extend this to allow for both rate types and the ability for the borrower to swap in between. 
+
 ## Implementation
 
 The lending contract that will be used is https://github.com/solana-labs/solana-program-library/tree/master/token-lending. We will be adding an additional state transition. A non-backed loan, this loan will be given to only a partial controlled account. Read more on this account [here](./margin.md)
