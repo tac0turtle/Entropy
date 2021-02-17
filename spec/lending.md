@@ -37,6 +37,32 @@ borrowers prefer a fixed interest rate. If a reserve were to keep track of the i
 
 The lending contract that will be used is https://github.com/solana-labs/solana-program-library/tree/master/token-lending. We will be adding an additional state transition. A non-backed loan, this loan will be given to only a partial controlled account. Read more on this account [here](./margin.md)
 
+Interest rate will be calculated from a simple linear model:
+
+```
+interest_rate = base_rate + (utilization_constant * utilization_rate)
+```
+
+where: 
+
+```
+utilization_rate = borrowed / total_reserve
+```
+
+and based from solana's inflation rate of 7 - 9%:
+
+```
+base_rate = 6% and utilization_constant = 4%
+```
+
+This means that the borrowing rate varies from 6 - 10%
+
+Exchange rates will be updated upon every repayment as follows:
+
+```
+exchange_rate = previous_exchange_rate * (accrued_interest + total_reserve / total_reserve)
+```
+
 ## Messages
 
 There will be an extra message added to the lending contract. A non-backed loan. 
