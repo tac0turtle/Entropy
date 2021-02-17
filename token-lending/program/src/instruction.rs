@@ -145,6 +145,53 @@ pub enum LendingInstruction {
         amount_type: BorrowAmountType,
     },
 
+    /// Borrow tokens from a reserve. The number of borrowed tokens
+    /// is calculated by market price. There is no debt obligation 
+    /// because the loan is given to a partially protocol controlled account.
+    /// The interest is paid on the initial borrow of the funds.
+    ///
+    ///   0. `[writable]` Source collateral token account, minted by deposit reserve collateral mint,
+    ///                     $authority can transfer $collateral_amount
+    ///   1. `[writable]` Destination liquidity token account, minted by borrow reserve liquidity mint
+    ///   2. `[]` Deposit reserve account.
+    ///   3. `[writable]` Deposit reserve collateral supply SPL Token account
+    ///   4. `[writable]` Deposit reserve collateral fee receiver account.
+    ///                     Must be the fee account specified at InitReserve.
+    ///   5. `[writable]` Borrow reserve account.
+    ///   6. `[writable]` Borrow reserve liquidity supply SPL Token account
+    ///   10 `[]` Lending market account.
+    ///   11 `[]` Derived lending market authority.
+    ///   12 `[]` User transfer authority ($authority).
+    ///   13 `[]` Dex market
+    ///   14 `[]` Dex market order book side
+    ///   15 `[]` Temporary memory
+    ///   16 `[]` Clock sysvar
+    ///   17 '[]` Token program id
+    ///   18 `[optional, writable]` Deposit reserve collateral host fee receiver account.
+    MarginBorrowReserveLiquidity {
+        // TODO: slippage constraint
+        /// Amount whose usage depends on `amount_type`
+        amount: u64,
+    },
+
+    /// Repay loaned tokens to a reserve.
+    ///
+    ///   0. `[writable]` Source liquidity token account, minted by repay reserve liquidity mint
+    ///                     $authority can transfer $collateral_amount
+    ///   1. `[writable]` Destination collateral token account, minted by withdraw reserve collateral mint
+    ///   2. `[writable]` Repay reserve account.
+    ///   3. `[writable]` Repay reserve liquidity supply SPL Token account
+    ///   4. `[]` Withdraw reserve account.
+    ///   5. `[writable]` Withdraw reserve collateral supply SPL Token account
+    ///   9. `[]` Lending market account.
+    ///   10 `[]` Derived lending market authority.
+    ///   11 `[]` User transfer authority ($authority).
+    ///   12 `[]` Clock sysvar
+    ///   13 `[]` Token program id
+    MarginRepayReserveLiquidity {
+        /// Amount of loan to repay
+        liquidity_amount: u64,
+    },
     /// Repay loaned tokens to a reserve and receive collateral tokens. The obligation balance
     /// will be recalculated for interest.
     ///

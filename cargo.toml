@@ -2,4 +2,5 @@
 members = [
   "token-lending/program",
   "token-lending/client",
+  "programs/*",
 ]
