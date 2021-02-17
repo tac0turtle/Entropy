@@ -13,6 +13,7 @@ A Margin Trading Protocol on Solana.
 - [Lending Pool](./spec/lending.md)
 - [Serum DEX](./spec/dex.md)
 - [Insurance](./spec/insurnace.md)
+- [liquidation](./spec/liquidation.md)
 - [Staking](./spec/staking/md)
 - [Governannce](./spec/governance.md)
 
