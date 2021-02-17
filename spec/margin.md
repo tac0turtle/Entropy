@@ -70,13 +70,13 @@ pub struct MarginAccount {
 
 The margin contract defines 5 messages, four of which can only be accessed by the trader. 
 
-### CreateAccount
+### Initialize
 
-CreateAccount creates a margin account on behalf of the caller.
+Initialize creates a margin account on behalf of the caller.
 
 ```rust
 #[derive(Accounts)]
-pub struct CreateAccount<'info> {
+pub struct Initialize<'info> {
     #[account(signer)]
     authority: AccountInfo<'info>,
     // Authority (trader)
