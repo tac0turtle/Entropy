@@ -7,8 +7,9 @@ use anchor_spl::token::{self, TokenAccount};
 pub mod margin_account {
     use super::*;
 
-    pub fn initialize(_ctx: Context<Initialize>) -> ProgramResult {
-        // TODO
+    pub fn initialize(ctx: Context<Initialize>, trader: Pubkey) -> ProgramResult {
+        let margin_account = &mut ctx.accounts.margin_account;
+        margin_account.trader = trader;
         Ok(())
     }
     pub fn deposit(_ctx: Context<Deposit>) -> ProgramResult {
@@ -23,11 +24,7 @@ pub mod margin_account {
         // TODO
         Ok(())
     }
-    pub fn liquidate(_ctx: Context<Trade>) -> ProgramResult {
-        // TODO
-        Ok(())
-    }
-    pub fn deleverage(_ctx: Context<Trade>) -> ProgramResult {
+    pub fn liquidate(_ctx: Context<Liquidate>) -> ProgramResult {
         // TODO
         Ok(())
     }
@@ -36,21 +33,8 @@ pub mod margin_account {
 /// Initializes new margin account.
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(signer)]
-    authority: AccountInfo<'info>,
-    /// Authority (trader)
-    // TODO check this
-    #[account(mut)]
-    trader: AccountInfo<'info>,
-    /// Coordinator address
-    coordinator: AccountInfo<'info>,
-    #[account(mut)]
-    vault: CpiAccount<'info, TokenAccount>,
-
-    // Misc
-    #[account("token_program.key == &token::ID")]
-    token_program: AccountInfo<'info>,
-    clock: Sysvar<'info, Clock>,
+    #[account(init)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
     rent: Sysvar<'info, Rent>,
 }
 
@@ -60,8 +44,6 @@ pub struct Deposit<'info> {
     /// Authority (trader)
     #[account(signer)]
     authority: AccountInfo<'info>,
-    /// Coordinator address
-    coordinator: AccountInfo<'info>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
     // Misc.
@@ -74,8 +56,6 @@ pub struct Withdraw<'info> {
     // Authority (trader)
     #[account(signer)]
     authority: AccountInfo<'info>,
-    // Coordinator address
-    coordinator: AccountInfo<'info>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
     // Misc.
@@ -93,26 +73,17 @@ pub struct Trade<'info> {
 #[derive(Accounts)]
 pub struct Liquidate<'info> {
     // TODO
-    #[account(signer)]
     authority: AccountInfo<'info>,
 }
 
 /// Margin account which handles
 #[account]
 pub struct MarginAccount {
-    /// The owner of this Vesting account.
+    /// The owner of this margin account.
     pub trader: Pubkey,
-    /// The mint of the SPL token locked up.
-    pub mint: Pubkey,
     /// Address of the account's token vault.
     pub vault: Pubkey,
-    /// Coordinator has the write to call functions within this program
-    pub coordinator: Pubkey,
-    /// The starting balance of this vesting account, i.e., how much was
-    /// originally deposited.
-    pub initial_balance: u64,
     /// Signer nonce.
     pub nonce: u8,
-    /// Check if there is an open trade.
-    pub open_trade: bool,
+    // TODO need to account for open trade state
 }
