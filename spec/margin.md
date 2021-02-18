@@ -43,22 +43,28 @@ actions (each action corresponding to a transaction):
 
 ## State
 
+The contract has state. 
+
+- Pairs: Pairs represents which trading pairs a margin account is allowed to trade. Serum is a large exchange with countless trading pairs. Many of these pairs do not have much liquidity. For this reason we need to limit which pairs are traded.
+
+```rust 
+#[state]
+pub struct Margin {
+    // pairs represents an array of pairs available to trade
+    pub paris: vec<PubKey>,
+}
+
 Margin has a single account struct as state. 
 
 ```rust
 #[account]
-pub struct MarginAccount {
-    /// The owner of this Vesting account.
+pub struct MarginAcc {
+    /// The owner of this margin account.
     pub trader: Pubkey,
-    /// The mint of the SPL token locked up.
-    pub mint: Pubkey,
     /// Address of the account's token vault.
     pub vault: Pubkey,
-    /// Coordinator has the write to call functions within this program
-    pub coordinator: Pubkey,
-    /// The starting balance of this vesting account, i.e., how much was
-    /// originally deposited.
-    pub initial_balance: u64,
+    /// loan_amount represents the total size of the loan. 
+    pub loan_amount: u64,
     /// Signer nonce.
     pub nonce: u8,
     /// Check if there is an open trade
@@ -82,8 +88,6 @@ pub struct CreateAccount<'info> {
     // Authority (trader)
     #[account(signer)]
     authority: AccountInfo<'info>,
-    // Coordinator address
-    coordinator: AccountInfo<'info>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
     // Misc.
@@ -108,8 +112,6 @@ pub struct Deposit<'info> {
     // Authority (trader)
     #[account(signer)]
     depositor_authority: AccountInfo<'info>,
-    // Coordinator address
-    coordinator: AccountInfo<'info>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
     // Misc.
@@ -132,8 +134,6 @@ pub struct Withdraw<'info> {
     // Authority (trader)
     #[account(signer)]
     depositor_authority: AccountInfo<'info>,
-    // Coordinator address
-    coordinator: AccountInfo<'info>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
     // Misc.
