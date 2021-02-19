@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+jobs:
+  test:
+    name: Cargo and Anchor tests
+    runs-on: ubuntu-latest
+    env:
+      NODE_VERSION: "14.7.0"
+      NODE_PATH: "/home/runner/.nvm/versions/node/v$NODE_VERSION/lib/node_modules/"
+    steps:
+      - uses: actions/checkout@v2
+      - name: Toolchain setup
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+
+      - name: Setup NVM
+        uses: dcodeIO/setup-node-nvm@master
+        with:
+          node-version: "14.7.0"
+
+      # Anchor test setup
+      - name: Install Anchor dependencies and run tests
+        run: |
+          sudo npm install -g mocha
+          sudo npm install -g @project-serum/anchor
+          sudo npm install -g @project-serum/serum
+          sudo npm install -g @project-serum/common
+          sudo npm install -g @solana/spl-token
+
+          sudo apt-get install -y pkg-config build-essential libudev-dev
+          sh -c "$(curl -sSfL https://release.solana.com/v1.5.5/install)"
+          export PATH="/home/runner/.local/share/solana/install/active_release/bin:$PATH"
+          export NODE_PATH="/home/runner/mynvm/versions/node/v14.7.0/bin/lib/node_modules/:$NODE_PATH"
+          export NODE_PATH="/usr/local/lib/node_modules/:$NODE_PATH"
+          yes | solana-keygen new
+          cargo install --git https://github.com/project-serum/anchor anchor-cli --locked
+          anchor test
+
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Toolchain setup
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+      - run: rustup component add rustfmt
+      - name: Run cargo fmt
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  check:
+    name: Cargo check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Toolchain setup
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+      - run: cargo check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: clippy
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          # Warn only for quicker dev, can add this back later
+          # args: -- -D warnings
