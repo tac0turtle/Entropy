@@ -31,23 +31,24 @@ jobs:
       # Anchor test setup
       - name: Install Anchor dependencies
         run: |
-          npm install -g mocha
-          npm install -g @project-serum/anchor
-          npm install -g @project-serum/serum
-          npm install -g @project-serum/common
-          npm install -g @solana/spl-token
-          apt-get install -y pkg-config build-essential libudev-dev
-          sh -c "$(curl -sSfL https://release.solana.com/v1.5.5/install)"
-          export PATH="/home/runner/.local/share/solana/install/active_release/bin:$PATH"
-
-          export NODE_PATH="/home/runner/mynvm/versions/node/v14.7.0/bin/lib/node_modules/:$NODE_PATH"
-          yes | solana-keygen new
-          cargo install --git https://github.com/project-serum/anchor anchor-cli --locked
+          sudo npm install -g mocha
+          sudo npm install -g @project-serum/anchor
+          sudo npm install -g @project-serum/serum
+          sudo npm install -g @project-serum/common
+          sudo npm install -g @solana/spl-token
 
           # Remove this later
+          npm config ls -l
+          sudo npm config ls -l
           npm list -g
           sudo npm list -g
 
+          apt-get install -y pkg-config build-essential libudev-dev
+          sh -c "$(curl -sSfL https://release.solana.com/v1.5.5/install)"
+          export PATH="/home/runner/.local/share/solana/install/active_release/bin:$PATH"
+          export NODE_PATH="/home/runner/mynvm/versions/node/v14.7.0/bin/lib/node_modules/:$NODE_PATH"
+          yes | solana-keygen new
+          cargo install --git https://github.com/project-serum/anchor anchor-cli --locked
           anchor test
 
   fmt:
