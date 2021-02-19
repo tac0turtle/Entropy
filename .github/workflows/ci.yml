@@ -13,8 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_VERSION: "14.7.0"
-      # PATH: "/home/runner/.local/share/solana/install/active_release/bin:$PATH"
-      # NODE_PATH: "/home/runner/.nvm/versions/node/v$NODE_VERSION/lib/node_modules/:$NODE_PATH"
+      NODE_PATH: "/home/runner/.nvm/versions/node/v$NODE_VERSION/lib/node_modules/"
     steps:
       - uses: actions/checkout@v2
       - name: Toolchain setup
@@ -26,10 +25,13 @@ jobs:
 
       # Anchor test setup
       - name: Install Anchor dependencies
+        uses: dcodeIO/setup-node-nvm@master
+        with:
+          node-version: "14.7.0"
         run: |
-          curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.37.2/install.sh | bash
-          export NVM_DIR="/home/runner/.nvm"
-          nvm install $NODE_VERSION
+          # curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.37.2/install.sh | bash
+          # export NVM_DIR="/home/runner/.nvm"
+          # sudo nvm install $NODE_VERSION
           sudo npm install -g mocha
           sudo npm install -g @project-serum/anchor
           sudo npm install -g @project-serum/serum
