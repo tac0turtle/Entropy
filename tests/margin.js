@@ -35,6 +35,8 @@ describe("margin-account", () => {
   // const vault = new anchor.web3.Account();
 
   it("Initializes margin account", async () => {
+    // Arbitrary size for now, just need it to be large enough
+    const marginSize = 1200;
     await program.rpc.initialize(provider.wallet.publicKey, {
       accounts: {
         marginAccount: marginAcc.publicKey,
@@ -42,7 +44,7 @@ describe("margin-account", () => {
       },
       signers: [marginAcc],
       instructions: [
-        await program.account.marginAccount.createInstruction(marginAcc),
+        await program.account.marginAccount.createInstruction(marginAcc, marginSize),
       ],
     });
 
