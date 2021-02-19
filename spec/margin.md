@@ -58,17 +58,14 @@ Margin has a single account struct as state.
 
 ```rust
 #[account]
-pub struct MarginAcc {
+pub struct MarginAccount {
     /// The owner of this margin account.
     pub trader: Pubkey,
     /// Address of the account's token vault.
     pub vault: Pubkey,
-    /// loan_amount represents the total size of the loan. 
-    pub loan_amount: u64,
     /// Signer nonce.
     pub nonce: u8,
-    /// Check if there is an open trade
-    pub open_trade: bool,
+    // TODO need to account for open trade state
 }
 ```
 
@@ -83,17 +80,8 @@ Initialize creates a margin account on behalf of the caller.
 ```rust
 #[derive(Accounts)]
 pub struct Initialize<'info> {
-    #[account(signer)]
-    authority: AccountInfo<'info>,
-    // Authority (trader)
-    #[account(signer)]
-    authority: AccountInfo<'info>,
-    #[account(mut)]
-    vault: CpiAccount<'info, TokenAccount>,
-    // Misc.
-    #[account("token_program.key == &token::ID")]
-    token_program: AccountInfo<'info>,
-    clock: Sysvar<'info, Clock>,
+    #[account(init)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
     rent: Sysvar<'info, Rent>,
 }
 ```
