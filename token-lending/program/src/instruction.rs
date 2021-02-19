@@ -146,9 +146,8 @@ pub enum LendingInstruction {
     },
 
     /// Borrow tokens from a reserve. The number of borrowed tokens
-    /// is calculated by market price. There is no debt obligation 
+    /// is calculated by market price. There is no debt obligation
     /// because the loan is given to a partially protocol controlled account.
-    /// The interest is paid on the initial borrow of the funds.
     ///
     ///   0. `[writable]` Source collateral token account, minted by deposit reserve collateral mint,
     ///                     $authority can transfer $collateral_amount
@@ -174,7 +173,7 @@ pub enum LendingInstruction {
         amount: u64,
     },
 
-    /// Repay loaned tokens to a reserve.
+    /// Repay loaned tokens to a reserve. This loan was taken with no obligation, interest rates must be paid back at this step.
     ///
     ///   0. `[writable]` Source liquidity token account, minted by repay reserve liquidity mint
     ///                     $authority can transfer $collateral_amount
@@ -412,7 +411,19 @@ impl LendingInstruction {
                 buf.extend_from_slice(&amount.to_le_bytes());
                 buf.extend_from_slice(&amount_type.to_u8().unwrap().to_le_bytes());
             }
+            Self::MarginBorrowReserveLiquidity {
+                amount,
+                amount_type,
+            } => {
+                buf.push(5);
+                buf.extend_from_slice(&amount.to_le_bytes());
+                // buf.extend_from_slice(&amount_type.to_u8().unwrap().to_le_bytes());
+            }
             Self::RepayReserveLiquidity { liquidity_amount } => {
+                buf.push(6);
+                buf.extend_from_slice(&liquidity_amount.to_le_bytes());
+            }
+            Self::MarginRepayReserveLiquidity { liquidity_amount } => {
                 buf.push(6);
                 buf.extend_from_slice(&liquidity_amount.to_le_bytes());
             }
@@ -663,6 +674,56 @@ pub fn borrow_reserve_liquidity(
     }
 }
 
+/// Creates a 'MarginBorrowReserveLiquidity' instruction.
+#[allow(clippy::too_many_arguments)]
+pub fn margin_borrow_reserve_liquidity(
+    program_id: Pubkey,
+    amount: u64,
+    source_collateral_pubkey: Pubkey,
+    destination_liquidity_pubkey: Pubkey,
+    deposit_reserve_pubkey: Pubkey,
+    deposit_reserve_collateral_supply_pubkey: Pubkey,
+    deposit_reserve_collateral_fees_receiver_pubkey: Pubkey,
+    borrow_reserve_pubkey: Pubkey,
+    borrow_reserve_liquidity_supply_pubkey: Pubkey,
+    lending_market_pubkey: Pubkey,
+    lending_market_authority_pubkey: Pubkey,
+    user_transfer_authority_pubkey: Pubkey,
+    dex_market_pubkey: Pubkey,
+    dex_market_order_book_side_pubkey: Pubkey,
+    memory_pubkey: Pubkey,
+    deposit_reserve_collateral_host_pubkey: Option<Pubkey>,
+) -> Instruction {
+    let mut accounts = vec![
+        AccountMeta::new(source_collateral_pubkey, false),
+        AccountMeta::new(destination_liquidity_pubkey, false),
+        AccountMeta::new_readonly(deposit_reserve_pubkey, false),
+        AccountMeta::new(deposit_reserve_collateral_supply_pubkey, false),
+        AccountMeta::new(deposit_reserve_collateral_fees_receiver_pubkey, false),
+        AccountMeta::new(borrow_reserve_pubkey, false),
+        AccountMeta::new(borrow_reserve_liquidity_supply_pubkey, false),
+        AccountMeta::new_readonly(lending_market_pubkey, false),
+        AccountMeta::new_readonly(lending_market_authority_pubkey, false),
+        AccountMeta::new_readonly(user_transfer_authority_pubkey, true),
+        AccountMeta::new_readonly(dex_market_pubkey, false),
+        AccountMeta::new_readonly(dex_market_order_book_side_pubkey, false),
+        AccountMeta::new_readonly(memory_pubkey, false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
+        AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+    if let Some(deposit_reserve_collateral_host_pubkey) = deposit_reserve_collateral_host_pubkey {
+        accounts.push(AccountMeta::new(
+            deposit_reserve_collateral_host_pubkey,
+            false,
+        ));
+    }
+    Instruction {
+        program_id,
+        accounts,
+        data: LendingInstruction::MarginBorrowReserveLiquidity { amount }.pack(),
+    }
+}
+
 /// Creates a `RepayReserveLiquidity` instruction
 #[allow(clippy::too_many_arguments)]
 pub fn repay_reserve_liquidity(
@@ -700,6 +761,40 @@ pub fn repay_reserve_liquidity(
             AccountMeta::new_readonly(spl_token::id(), false),
         ],
         data: LendingInstruction::RepayReserveLiquidity { liquidity_amount }.pack(),
+    }
+}
+
+/// Creates a `MarginRepayReserveLiquidity` instruction
+#[allow(clippy::too_many_arguments)]
+pub fn margin_repay_reserve_liquidity(
+    program_id: Pubkey,
+    liquidity_amount: u64,
+    source_liquidity_pubkey: Pubkey,
+    destination_collateral_pubkey: Pubkey,
+    repay_reserve_pubkey: Pubkey,
+    repay_reserve_liquidity_supply_pubkey: Pubkey,
+    withdraw_reserve_pubkey: Pubkey,
+    withdraw_reserve_collateral_supply_pubkey: Pubkey,
+    lending_market_pubkey: Pubkey,
+    lending_market_authority_pubkey: Pubkey,
+    user_transfer_authority_pubkey: Pubkey,
+) -> Instruction {
+    Instruction {
+        program_id,
+        accounts: vec![
+            AccountMeta::new(source_liquidity_pubkey, false),
+            AccountMeta::new(destination_collateral_pubkey, false),
+            AccountMeta::new(repay_reserve_pubkey, false),
+            AccountMeta::new(repay_reserve_liquidity_supply_pubkey, false),
+            AccountMeta::new_readonly(withdraw_reserve_pubkey, false),
+            AccountMeta::new(withdraw_reserve_collateral_supply_pubkey, false),
+            AccountMeta::new_readonly(lending_market_pubkey, false),
+            AccountMeta::new_readonly(lending_market_authority_pubkey, false),
+            AccountMeta::new_readonly(user_transfer_authority_pubkey, true),
+            AccountMeta::new_readonly(sysvar::clock::id(), false),
+            AccountMeta::new_readonly(spl_token::id(), false),
+        ],
+        data: LendingInstruction::MarginRepayReserveLiquidity { liquidity_amount }.pack(),
     }
 }
 

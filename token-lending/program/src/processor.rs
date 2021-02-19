@@ -3,7 +3,14 @@
 use crate::{
     dex_market::{DexMarket, TradeSimulator, BASE_MINT_OFFSET, QUOTE_MINT_OFFSET},
     error::LendingError,
+    helper::{
+        assert_last_update_slot, assert_rent_exempt, assert_uninitialized, spl_token_burn,
+        spl_token_init_account, spl_token_init_mint, spl_token_mint_to, spl_token_transfer,
+        unpack_mint, TokenBurnParams, TokenInitializeAccountParams, TokenInitializeMintParams,
+        TokenMintToParams, TokenTransferParams,
+    },
     instruction::{BorrowAmountType, LendingInstruction},
+    margin::{process_margin_borrow, process_margin_repay},
     math::{Decimal, TryAdd, WAD},
     state::{
         LendingMarket, LiquidateResult, NewObligationParams, NewReserveParams, Obligation,
@@ -13,14 +20,12 @@ use crate::{
 use num_traits::FromPrimitive;
 use solana_program::{
     account_info::{next_account_info, AccountInfo},
-    clock::Slot,
     decode_error::DecodeError,
     entrypoint::ProgramResult,
     msg,
-    program::{invoke, invoke_signed},
-    program_error::{PrintProgramError, ProgramError},
+    program_error::PrintProgramError,
     program_option::COption,
-    program_pack::{IsInitialized, Pack},
+    program_pack::Pack,
     pubkey::Pubkey,
     sysvar::{clock::Clock, rent::Rent, Sysvar},
 };
@@ -64,16 +69,17 @@ pub fn process_instruction(
             msg!("Instruction: Borrow");
             process_borrow(program_id, amount, amount_type, accounts)
         }
-        LendingInstruction::MarginBorrowReserveLiquidity {
-            amount,
-            amount_type,
-        } => {
+        LendingInstruction::MarginBorrowReserveLiquidity { amount } => {
             msg!("Instruction: Borrow");
-            process_margin_borrow(program_id, amount, amount_type, accounts)
+            process_margin_borrow(program_id, amount, accounts)
         }
         LendingInstruction::RepayReserveLiquidity { liquidity_amount } => {
             msg!("Instruction: Repay");
             process_repay(program_id, liquidity_amount, accounts)
+        }
+        LendingInstruction::MarginRepayReserveLiquidity { liquidity_amount } => {
+            msg!("Instruction: Repay");
+            process_margin_repay(program_id, liquidity_amount, accounts)
         }
         LendingInstruction::LiquidateObligation { liquidity_amount } => {
             msg!("Instruction: Liquidate");
@@ -833,213 +839,6 @@ fn process_borrow(
 }
 
 #[inline(never)] // avoid stack frame limit
-fn process_margin_borrow(
-    program_id: &Pubkey,
-    token_amount: u64,
-    token_amount_type: BorrowAmountType,
-    accounts: &[AccountInfo],
-) -> ProgramResult {
-    if token_amount == 0 {
-        return Err(LendingError::InvalidAmount.into());
-    }
-
-    let account_info_iter = &mut accounts.iter();
-    let source_collateral_info = next_account_info(account_info_iter)?;
-    let destination_liquidity_info = next_account_info(account_info_iter)?;
-    let deposit_reserve_info = next_account_info(account_info_iter)?;
-    let deposit_reserve_collateral_supply_info = next_account_info(account_info_iter)?;
-    let deposit_reserve_collateral_fees_receiver_info = next_account_info(account_info_iter)?;
-    let borrow_reserve_info = next_account_info(account_info_iter)?;
-    let borrow_reserve_liquidity_supply_info = next_account_info(account_info_iter)?;
-    let lending_market_info = next_account_info(account_info_iter)?;
-    let lending_market_authority_info = next_account_info(account_info_iter)?;
-    let user_transfer_authority_info = next_account_info(account_info_iter)?;
-    let dex_market_info = next_account_info(account_info_iter)?;
-    let dex_market_orders_info = next_account_info(account_info_iter)?;
-    let memory = next_account_info(account_info_iter)?;
-    let clock = &Clock::from_account_info(next_account_info(account_info_iter)?)?;
-    let token_program_id = next_account_info(account_info_iter)?;
-
-    // Ensure memory is owned by this program so that we don't have to zero it out
-    if memory.owner != program_id {
-        return Err(LendingError::InvalidAccountOwner.into());
-    }
-
-    let lending_market = LendingMarket::unpack(&lending_market_info.data.borrow())?;
-    if lending_market_info.owner != program_id {
-        return Err(LendingError::InvalidAccountOwner.into());
-    }
-    if &lending_market.token_program_id != token_program_id.key {
-        return Err(LendingError::InvalidTokenProgram.into());
-    }
-
-    let deposit_reserve = Reserve::unpack(&deposit_reserve_info.data.borrow())?;
-    if deposit_reserve_info.owner != program_id {
-        return Err(LendingError::InvalidAccountOwner.into());
-    }
-    if &deposit_reserve.lending_market != lending_market_info.key {
-        msg!("Invalid reserve lending market account");
-        return Err(LendingError::InvalidAccountInput.into());
-    }
-
-    let mut borrow_reserve = Reserve::unpack(&borrow_reserve_info.data.borrow())?;
-    if borrow_reserve_info.owner != program_id {
-        return Err(LendingError::InvalidAccountOwner.into());
-    }
-    if borrow_reserve.lending_market != deposit_reserve.lending_market {
-        return Err(LendingError::LendingMarketMismatch.into());
-    }
-
-    if deposit_reserve.config.loan_to_value_ratio == 0 {
-        return Err(LendingError::ReserveCollateralDisabled.into());
-    }
-    if deposit_reserve_info.key == borrow_reserve_info.key {
-        return Err(LendingError::DuplicateReserve.into());
-    }
-    if deposit_reserve.liquidity.mint_pubkey == borrow_reserve.liquidity.mint_pubkey {
-        return Err(LendingError::DuplicateReserveMint.into());
-    }
-    if &borrow_reserve.liquidity.supply_pubkey != borrow_reserve_liquidity_supply_info.key {
-        msg!("Invalid borrow reserve liquidity supply account input");
-        return Err(LendingError::InvalidAccountInput.into());
-    }
-    if &deposit_reserve.collateral.supply_pubkey != deposit_reserve_collateral_supply_info.key {
-        msg!("Invalid deposit reserve collateral supply account input");
-        return Err(LendingError::InvalidAccountInput.into());
-    }
-    if &deposit_reserve.collateral.supply_pubkey == source_collateral_info.key {
-        msg!("Cannot use deposit reserve collateral supply as source account input");
-        return Err(LendingError::InvalidAccountInput.into());
-    }
-    if &deposit_reserve.collateral.fees_receiver
-        != deposit_reserve_collateral_fees_receiver_info.key
-    {
-        msg!("Invalid deposit reserve collateral fees receiver account");
-        return Err(LendingError::InvalidAccountInput.into());
-    }
-    if &borrow_reserve.liquidity.supply_pubkey == destination_liquidity_info.key {
-        msg!("Cannot use borrow reserve liquidity supply as destination account input");
-        return Err(LendingError::InvalidAccountInput.into());
-    }
-
-    // TODO: handle case when neither reserve is the quote currency
-    if borrow_reserve.dex_market.is_none() && deposit_reserve.dex_market.is_none() {
-        msg!("One reserve must have a dex market");
-        return Err(LendingError::InvalidAccountInput.into());
-    }
-    if let COption::Some(dex_market_pubkey) = borrow_reserve.dex_market {
-        if &dex_market_pubkey != dex_market_info.key {
-            msg!("Invalid dex market account input");
-            return Err(LendingError::InvalidAccountInput.into());
-        }
-    }
-    if let COption::Some(dex_market_pubkey) = deposit_reserve.dex_market {
-        if &dex_market_pubkey != dex_market_info.key {
-            msg!("Invalid dex market account input");
-            return Err(LendingError::InvalidAccountInput.into());
-        }
-    }
-
-    assert_last_update_slot(&borrow_reserve, clock.slot)?;
-    assert_last_update_slot(&deposit_reserve, clock.slot)?;
-
-    let trade_simulator = TradeSimulator::new(
-        dex_market_info,
-        dex_market_orders_info,
-        memory,
-        &lending_market.quote_token_mint,
-        &borrow_reserve.liquidity.mint_pubkey,
-        &deposit_reserve.liquidity.mint_pubkey,
-    )?;
-
-    let loan = deposit_reserve.create_loan(
-        token_amount,
-        token_amount_type,
-        trade_simulator,
-        &borrow_reserve.liquidity.mint_pubkey,
-    )?;
-
-    borrow_reserve.liquidity.borrow(loan.borrow_amount)?;
-    obligation.borrowed_liquidity_wads = obligation
-        .borrowed_liquidity_wads
-        .try_add(Decimal::from(loan.borrow_amount))?;
-    obligation.deposited_collateral_tokens += loan.collateral_amount;
-
-    Obligation::pack(obligation, &mut obligation_info.data.borrow_mut())?;
-    Reserve::pack(borrow_reserve, &mut borrow_reserve_info.data.borrow_mut())?;
-
-    let authority_signer_seeds = &[
-        lending_market_info.key.as_ref(),
-        &[lending_market.bump_seed],
-    ];
-    let lending_market_authority_pubkey =
-        Pubkey::create_program_address(authority_signer_seeds, program_id)?;
-    if lending_market_authority_info.key != &lending_market_authority_pubkey {
-        return Err(LendingError::InvalidMarketAuthority.into());
-    }
-
-    // deposit collateral
-    spl_token_transfer(TokenTransferParams {
-        source: source_collateral_info.clone(),
-        destination: deposit_reserve_collateral_supply_info.clone(),
-        amount: loan.collateral_amount,
-        authority: user_transfer_authority_info.clone(),
-        authority_signer_seeds: &[],
-        token_program: token_program_id.clone(),
-    })?;
-
-    // transfer host fees if host is specified
-    let mut owner_fee = loan.origination_fee;
-    if let Ok(host_fee_recipient) = next_account_info(account_info_iter) {
-        if loan.host_fee > 0 {
-            owner_fee -= loan.host_fee;
-            spl_token_transfer(TokenTransferParams {
-                source: source_collateral_info.clone(),
-                destination: host_fee_recipient.clone(),
-                amount: loan.host_fee,
-                authority: user_transfer_authority_info.clone(),
-                authority_signer_seeds: &[],
-                token_program: token_program_id.clone(),
-            })?;
-        }
-    }
-
-    // transfer remaining fees to owner
-    if owner_fee > 0 {
-        spl_token_transfer(TokenTransferParams {
-            source: source_collateral_info.clone(),
-            destination: deposit_reserve_collateral_fees_receiver_info.clone(),
-            amount: owner_fee,
-            authority: user_transfer_authority_info.clone(),
-            authority_signer_seeds: &[],
-            token_program: token_program_id.clone(),
-        })?;
-    }
-
-    // borrow liquidity
-    spl_token_transfer(TokenTransferParams {
-        source: borrow_reserve_liquidity_supply_info.clone(),
-        destination: destination_liquidity_info.clone(),
-        amount: loan.borrow_amount,
-        authority: lending_market_authority_info.clone(),
-        authority_signer_seeds,
-        token_program: token_program_id.clone(),
-    })?;
-
-    // mint obligation tokens to output account
-    spl_token_mint_to(TokenMintToParams {
-        mint: obligation_token_mint_info.clone(),
-        destination: obligation_token_output_info.clone(),
-        amount: loan.collateral_amount,
-        authority: lending_market_authority_info.clone(),
-        authority_signer_seeds,
-        token_program: token_program_id.clone(),
-    })?;
-
-    Ok(())
-}
-
-#[inline(never)] // avoid stack frame limit
 fn process_repay(
     program_id: &Pubkey,
     liquidity_amount: u64,
@@ -1388,200 +1187,6 @@ fn process_accrue_interest(program_id: &Pubkey, accounts: &[AccountInfo]) -> Pro
     }
 
     Ok(())
-}
-
-fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult {
-    if !rent.is_exempt(account_info.lamports(), account_info.data_len()) {
-        msg!(&rent.minimum_balance(account_info.data_len()).to_string());
-        Err(LendingError::NotRentExempt.into())
-    } else {
-        Ok(())
-    }
-}
-
-fn assert_last_update_slot(reserve: &Reserve, slot: Slot) -> ProgramResult {
-    if !reserve.last_update_slot == slot {
-        Err(LendingError::ReserveStale.into())
-    } else {
-        Ok(())
-    }
-}
-
-fn assert_uninitialized<T: Pack + IsInitialized>(
-    account_info: &AccountInfo,
-) -> Result<T, ProgramError> {
-    let account: T = T::unpack_unchecked(&account_info.data.borrow())?;
-    if account.is_initialized() {
-        Err(LendingError::AlreadyInitialized.into())
-    } else {
-        Ok(account)
-    }
-}
-
-/// Unpacks a spl_token `Mint`.
-fn unpack_mint(data: &[u8]) -> Result<spl_token::state::Mint, LendingError> {
-    spl_token::state::Mint::unpack(data).map_err(|_| LendingError::InvalidTokenMint)
-}
-
-/// Issue a spl_token `InitializeMint` instruction.
-#[inline(always)]
-fn spl_token_init_mint(params: TokenInitializeMintParams<'_, '_>) -> ProgramResult {
-    let TokenInitializeMintParams {
-        mint,
-        rent,
-        authority,
-        token_program,
-        decimals,
-    } = params;
-    let ix = spl_token::instruction::initialize_mint(
-        token_program.key,
-        mint.key,
-        authority,
-        None,
-        decimals,
-    )?;
-    let result = invoke(&ix, &[mint, rent, token_program]);
-    result.map_err(|_| LendingError::TokenInitializeMintFailed.into())
-}
-
-/// Issue a spl_token `InitializeAccount` instruction.
-#[inline(always)]
-fn spl_token_init_account(params: TokenInitializeAccountParams<'_>) -> ProgramResult {
-    let TokenInitializeAccountParams {
-        account,
-        mint,
-        owner,
-        rent,
-        token_program,
-    } = params;
-    let ix = spl_token::instruction::initialize_account(
-        token_program.key,
-        account.key,
-        mint.key,
-        owner.key,
-    )?;
-    let result = invoke(&ix, &[account, mint, owner, rent, token_program]);
-    result.map_err(|_| LendingError::TokenInitializeAccountFailed.into())
-}
-
-/// Issue a spl_token `Transfer` instruction.
-#[inline(always)]
-fn spl_token_transfer(params: TokenTransferParams<'_, '_>) -> ProgramResult {
-    let TokenTransferParams {
-        source,
-        destination,
-        authority,
-        token_program,
-        amount,
-        authority_signer_seeds,
-    } = params;
-    let result = invoke_signed(
-        &spl_token::instruction::transfer(
-            token_program.key,
-            source.key,
-            destination.key,
-            authority.key,
-            &[],
-            amount,
-        )?,
-        &[source, destination, authority, token_program],
-        &[authority_signer_seeds],
-    );
-    result.map_err(|_| LendingError::TokenTransferFailed.into())
-}
-
-/// Issue a spl_token `MintTo` instruction.
-fn spl_token_mint_to(params: TokenMintToParams<'_, '_>) -> ProgramResult {
-    let TokenMintToParams {
-        mint,
-        destination,
-        authority,
-        token_program,
-        amount,
-        authority_signer_seeds,
-    } = params;
-    let result = invoke_signed(
-        &spl_token::instruction::mint_to(
-            token_program.key,
-            mint.key,
-            destination.key,
-            authority.key,
-            &[],
-            amount,
-        )?,
-        &[mint, destination, authority, token_program],
-        &[authority_signer_seeds],
-    );
-    result.map_err(|_| LendingError::TokenMintToFailed.into())
-}
-
-/// Issue a spl_token `Burn` instruction.
-#[inline(always)]
-fn spl_token_burn(params: TokenBurnParams<'_, '_>) -> ProgramResult {
-    let TokenBurnParams {
-        mint,
-        source,
-        authority,
-        token_program,
-        amount,
-        authority_signer_seeds,
-    } = params;
-    let result = invoke_signed(
-        &spl_token::instruction::burn(
-            token_program.key,
-            source.key,
-            mint.key,
-            authority.key,
-            &[],
-            amount,
-        )?,
-        &[source, mint, authority, token_program],
-        &[authority_signer_seeds],
-    );
-    result.map_err(|_| LendingError::TokenBurnFailed.into())
-}
-
-struct TokenInitializeMintParams<'a: 'b, 'b> {
-    mint: AccountInfo<'a>,
-    rent: AccountInfo<'a>,
-    authority: &'b Pubkey,
-    decimals: u8,
-    token_program: AccountInfo<'a>,
-}
-
-struct TokenInitializeAccountParams<'a> {
-    account: AccountInfo<'a>,
-    mint: AccountInfo<'a>,
-    owner: AccountInfo<'a>,
-    rent: AccountInfo<'a>,
-    token_program: AccountInfo<'a>,
-}
-
-struct TokenTransferParams<'a: 'b, 'b> {
-    source: AccountInfo<'a>,
-    destination: AccountInfo<'a>,
-    amount: u64,
-    authority: AccountInfo<'a>,
-    authority_signer_seeds: &'b [&'b [u8]],
-    token_program: AccountInfo<'a>,
-}
-
-struct TokenMintToParams<'a: 'b, 'b> {
-    mint: AccountInfo<'a>,
-    destination: AccountInfo<'a>,
-    amount: u64,
-    authority: AccountInfo<'a>,
-    authority_signer_seeds: &'b [&'b [u8]],
-    token_program: AccountInfo<'a>,
-}
-
-struct TokenBurnParams<'a: 'b, 'b> {
-    mint: AccountInfo<'a>,
-    source: AccountInfo<'a>,
-    amount: u64,
-    authority: AccountInfo<'a>,
-    authority_signer_seeds: &'b [&'b [u8]],
-    token_program: AccountInfo<'a>,
 }
 
 impl PrintProgramError for LendingError {
