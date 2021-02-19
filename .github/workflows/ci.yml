@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NODE_VERSION: "14.7.0"
-      PATH: "/home/runner/.local/share/solana/install/active_release/bin:$PATH"
-      NODE_PATH: "/home/runner/.nvm/versions/node/v$NODE_VERSION/lib/node_modules/:$NODE_PATH"
+      # PATH: "/home/runner/.local/share/solana/install/active_release/bin:$PATH"
+      # NODE_PATH: "/home/runner/.nvm/versions/node/v$NODE_VERSION/lib/node_modules/:$NODE_PATH"
     steps:
       - uses: actions/checkout@v2
       - name: Toolchain setup
