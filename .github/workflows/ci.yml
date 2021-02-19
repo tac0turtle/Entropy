@@ -23,11 +23,13 @@ jobs:
           toolchain: nightly
           override: true
 
-      # Anchor test setup
-      - name: Install Anchor dependencies
+      - name: Setup NVM
         uses: dcodeIO/setup-node-nvm@master
         with:
           node-version: "14.7.0"
+
+      # Anchor test setup
+      - name: Install Anchor dependencies
         run: |
           # curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.37.2/install.sh | bash
           # export NVM_DIR="/home/runner/.nvm"
