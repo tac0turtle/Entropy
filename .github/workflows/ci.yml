@@ -42,7 +42,10 @@ jobs:
           yes | solana-keygen new
           cargo install --git https://github.com/project-serum/anchor anchor-cli --locked
       - name: Run anchor tests
-        run: anchor test
+        run: |
+          export PATH="/home/runner/.local/share/solana/install/active_release/bin:$PATH"
+          export NODE_PATH="/home/runner/.nvm/versions/node/v$NODE_VERSION/lib/node_modules/:$NODE_PATH"
+          anchor test
 
   fmt:
     name: rustfmt
