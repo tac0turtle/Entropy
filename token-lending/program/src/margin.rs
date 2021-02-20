@@ -5,7 +5,8 @@ use crate::{
         assert_last_update_slot, spl_token_burn, spl_token_mint_to, spl_token_transfer,
         unpack_mint, TokenBurnParams, TokenMintToParams, TokenTransferParams,
     },
-    math::Decimal,
+    instruction::BorrowAmountType,
+    // math::Decimal,
     state::{LendingMarket, Obligation, RepayResult, Reserve},
 };
 use solana_program::{
@@ -178,6 +179,7 @@ pub fn process_margin_repay(
 pub fn process_margin_borrow(
     program_id: &Pubkey,
     token_amount: u64,
+    amount_type: BorrowAmountType,
     accounts: &[AccountInfo],
 ) -> ProgramResult {
     if token_amount == 0 {

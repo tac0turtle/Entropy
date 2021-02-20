@@ -21,6 +21,8 @@ pub enum BorrowAmountType {
     LiquidityBorrowAmount,
     /// Treat amount as amount of collateral tokens to deposit
     CollateralDepositAmount,
+    /// Treat the amount as a margin trade loan
+    MarginBorrowAmount,
 }
 
 /// Instructions supported by the lending program.
@@ -171,6 +173,8 @@ pub enum LendingInstruction {
         // TODO: slippage constraint
         /// Amount whose usage depends on `amount_type`
         amount: u64,
+        /// Describe how the amount should be treated
+        amount_type: BorrowAmountType,
     },
 
     /// Repay loaned tokens to a reserve. This loan was taken with no obligation, interest rates must be paid back at this step.
@@ -679,6 +683,7 @@ pub fn borrow_reserve_liquidity(
 pub fn margin_borrow_reserve_liquidity(
     program_id: Pubkey,
     amount: u64,
+    amount_type: BorrowAmountType,
     source_collateral_pubkey: Pubkey,
     destination_liquidity_pubkey: Pubkey,
     deposit_reserve_pubkey: Pubkey,
@@ -720,7 +725,11 @@ pub fn margin_borrow_reserve_liquidity(
     Instruction {
         program_id,
         accounts,
-        data: LendingInstruction::MarginBorrowReserveLiquidity { amount }.pack(),
+        data: LendingInstruction::MarginBorrowReserveLiquidity {
+            amount,
+            amount_type,
+        }
+        .pack(),
     }
 }
 
