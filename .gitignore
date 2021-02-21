@@ -4,3 +4,4 @@ dist/
 .idea/
 target/
 Cargo.lock
+.anchor
