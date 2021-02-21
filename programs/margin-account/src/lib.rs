@@ -7,23 +7,35 @@ use anchor_spl::token::{self, TokenAccount};
 pub mod margin_account {
     use super::*;
 
+    /// Initialize new margin account under a specific trader's address.
     pub fn initialize(ctx: Context<Initialize>, trader: Pubkey) -> ProgramResult {
         let margin_account = &mut ctx.accounts.margin_account;
         margin_account.trader = trader;
         Ok(())
     }
-    pub fn deposit(_ctx: Context<Deposit>) -> ProgramResult {
+    /// Initialize a collateral account to be used to open a position.
+    pub fn init_obligation(_ctx: Context<InitObligation>) -> ProgramResult {
         // TODO
         Ok(())
     }
+    /// Open a leveraged position.
+    pub fn open_position(_ctx: Context<OpenPosition>) -> ProgramResult {
+        // TODO
+        Ok(())
+    }
+    /// Close an open leveraged position.
+    pub fn close_position(_ctx: Context<ClosePosition>) -> ProgramResult {
+        // TODO
+        Ok(())
+    }
+    /// Withdraw funds from an obligation account.
     pub fn withdraw(_ctx: Context<Withdraw>) -> ProgramResult {
         // TODO
         Ok(())
     }
-    pub fn trade(_ctx: Context<Trade>) -> ProgramResult {
-        // TODO
-        Ok(())
-    }
+    /// Liquidate a position if below liquidation price.
+    //? This potentially isn't needed, if the logic can happen on the lending pool (obligation
+    //? account) but for now it's assumed the transaction will have to go through here.
     pub fn liquidate(_ctx: Context<Liquidate>) -> ProgramResult {
         // TODO
         Ok(())
@@ -38,17 +50,12 @@ pub struct Initialize<'info> {
     rent: Sysvar<'info, Rent>,
 }
 
-/// Deposit funds into program account to be used for trading.
+/// Initialize new margin collateral obligation.
 #[derive(Accounts)]
-pub struct Deposit<'info> {
-    /// Authority (trader)
+pub struct InitObligation<'info> {
+    // TODO
     #[account(signer)]
     authority: AccountInfo<'info>,
-    #[account(mut)]
-    vault: CpiAccount<'info, TokenAccount>,
-    // Misc.
-    #[account("token_program.key == &token::ID")]
-    token_program: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
@@ -64,11 +71,20 @@ pub struct Withdraw<'info> {
 }
 
 #[derive(Accounts)]
-pub struct Trade<'info> {
+pub struct OpenPosition<'info> {
     // TODO
     #[account(signer)]
     authority: AccountInfo<'info>,
 }
+
+#[derive(Accounts)]
+pub struct ClosePosition<'info> {
+    // TODO
+    #[account(signer)]
+    authority: AccountInfo<'info>,
+}
+
+//? Possibly add cancel position, if it cannot be combined with close.
 
 #[derive(Accounts)]
 pub struct Liquidate<'info> {
@@ -76,14 +92,21 @@ pub struct Liquidate<'info> {
     authority: AccountInfo<'info>,
 }
 
-/// Margin account which handles
+/// Margin account state which keeps track of positions opened for a given trader.
 #[account]
 pub struct MarginAccount {
     /// The owner of this margin account.
     pub trader: Pubkey,
-    /// Address of the account's token vault.
-    pub vault: Pubkey,
-    /// Signer nonce.
-    pub nonce: u8,
-    // TODO need to account for open trade state
+
+    /// Open positions held by the margin account.
+    pub positions: Vec<Position>,
+}
+
+/// Open margin trade position.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct Position {
+    /// Program address for obligation account used as collateral.
+    pub obligation_account: Pubkey,
+    /// Indicates whether an obligation account has been used to open a leveraged position.
+    pub open: bool,
 }
