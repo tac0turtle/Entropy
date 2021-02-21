@@ -60,9 +60,7 @@ Margin has a single account struct as state.
 #[account]
 pub struct MarginAccount {
     /// The owner of this margin account.
-    pub trader: Pubkey,
-    /// Address of the account's token vault.
-    pub vault: Pubkey,
+    pub owner: Pubkey,
     /// Signer nonce.
     pub nonce: u8,
     // TODO need to account for open trade state
@@ -73,38 +71,55 @@ pub struct MarginAccount {
 
 The margin contract defines 5 messages, four of which can only be accessed by the trader. 
 
-### Initialize
+### InitializeAccount
 
 Initialize creates a margin account on behalf of the caller.
 
 ```rust
 #[derive(Accounts)]
-pub struct Initialize<'info> {
+pub struct InitializeAccount<'info> {
     #[account(init)]
     margin_account: ProgramAccount<'info, MarginAccount>,
-    rent: Sysvar<'info, Rent>,
 }
 ```
 
 ### Deposit
 
-Deposit deposits funds into a program account to be used for trading. Once a trade is initiated, deposits can still be made. 
+Deposit deposits funds into an obligation account to be used for borrowing and trading.
 
 - Can only be called by the trader.
+
+    ///   0. `[]` Deposit reserve account.
+    ///   1. `[]` Borrow reserve account.
+    ///   2. `[writable]` Obligation
+    ///   3. `[writable]` Obligation token mint
+    ///   4. `[writable]` Obligation token output
+    ///   5. `[]` Obligation token owner
+    ///   6. `[]` Lending market account.
+    ///   7. `[]` Derived lending market authority.
+
+    let deposit_reserve_info = next_account_info(account_info_iter)?;
+    let borrow_reserve_info = next_account_info(account_info_iter)?;
 
 ```rust
 #[derive(Accounts)]
 pub struct Deposit<'info> {
-    // Depositor
-    depositor: AccountInfo<'info>,
-    // Authority (trader)
-    #[account(signer)]
-    depositor_authority: AccountInfo<'info>,
+    depositor_reserve: AccountInfo<'info>,
+    borrow_reserve: AccountInfo<'info>,
     #[account(mut)]
-    vault: CpiAccount<'info, TokenAccount>,
+    obligation: AccountInfo<'info>,
+    #[account(mut)]
+    obligation_token_mint: AccountInfo<'info>,
+    #[account(mut)]
+    obligation_token_output: AccountInfo<'info>,
+    obligation_token_owner: AccountInfo<'info>,
+    lending_market_: AccountInfo<'info>,
+    lending_market_authority: AccountInfo<'info>,
     // Misc.
     #[account("token_program.key == &token::ID")]
     token_program: AccountInfo<'info>,
+    clock: Sysvar<'info, Clock>,
+    rent: Sysvar<'info, Rent>,
 }
 ```
 
@@ -130,7 +145,7 @@ pub struct Withdraw<'info> {
 }
 ```
 
-### Trade
+### OpenTrade
 
 Trade does multiple things in a single step. When a user would like conduct a trade they will specify the amount of margin and total trade they would like to conduct. The program will check that there are enough funds in the margin account and check if there are enough funds in the lending pool. If there are enough funds the loan will be taken and the trade executed. At this point the margin account has been marked as having a open trade. At this point no withdraws can be made. When a user sells their position or part of the position the funds are repaid to the lending protocol, after this, what is left over is considered the amount the user has to withdraw. 
 
@@ -138,7 +153,7 @@ Trade does multiple things in a single step. When a user would like conduct a tr
 
 ```rust
 #[derive(Accounts)]
-pub struct Trade<'info> {
+pub struct OpenTrade<'info> {
 
 }
 ```
