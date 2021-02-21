@@ -1,6 +1,6 @@
 use crate::{error::LendingError, state::Reserve};
 use solana_program::{
-    account_info::{next_account_info, AccountInfo},
+    account_info::AccountInfo,
     clock::Slot,
     entrypoint::ProgramResult,
     msg,
@@ -8,25 +8,8 @@ use solana_program::{
     program_error::ProgramError,
     program_pack::{IsInitialized, Pack},
     pubkey::Pubkey,
-    sysvar::{clock::Clock, rent::Rent, Sysvar},
+    sysvar::rent::Rent,
 };
-
-#[inline(never)] // avoid stack frame limit
-pub fn process_accrue_interest(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
-    let account_info_iter = &mut accounts.iter();
-    let clock = &Clock::from_account_info(next_account_info(account_info_iter)?)?;
-    for reserve_info in account_info_iter {
-        let mut reserve = Reserve::unpack(&reserve_info.data.borrow())?;
-        if reserve_info.owner != program_id {
-            return Err(LendingError::InvalidAccountOwner.into());
-        }
-
-        reserve.accrue_interest(clock.slot)?;
-        Reserve::pack(reserve, &mut reserve_info.data.borrow_mut())?;
-    }
-
-    Ok(())
-}
 
 pub fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult {
     if !rent.is_exempt(account_info.lamports(), account_info.data_len()) {
@@ -180,44 +163,44 @@ pub fn spl_token_burn(params: TokenBurnParams<'_, '_>) -> ProgramResult {
 }
 
 pub struct TokenInitializeMintParams<'a: 'b, 'b> {
-    mint: AccountInfo<'a>,
-    rent: AccountInfo<'a>,
-    authority: &'b Pubkey,
-    decimals: u8,
-    token_program: AccountInfo<'a>,
+    pub mint: AccountInfo<'a>,
+    pub rent: AccountInfo<'a>,
+    pub authority: &'b Pubkey,
+    pub decimals: u8,
+    pub token_program: AccountInfo<'a>,
 }
 
 pub struct TokenInitializeAccountParams<'a> {
-    account: AccountInfo<'a>,
-    mint: AccountInfo<'a>,
-    owner: AccountInfo<'a>,
-    rent: AccountInfo<'a>,
-    token_program: AccountInfo<'a>,
+    pub account: AccountInfo<'a>,
+    pub mint: AccountInfo<'a>,
+    pub owner: AccountInfo<'a>,
+    pub rent: AccountInfo<'a>,
+    pub token_program: AccountInfo<'a>,
 }
 
 pub struct TokenTransferParams<'a: 'b, 'b> {
-    source: AccountInfo<'a>,
-    destination: AccountInfo<'a>,
-    amount: u64,
-    authority: AccountInfo<'a>,
-    authority_signer_seeds: &'b [&'b [u8]],
-    token_program: AccountInfo<'a>,
+    pub source: AccountInfo<'a>,
+    pub destination: AccountInfo<'a>,
+    pub amount: u64,
+    pub authority: AccountInfo<'a>,
+    pub authority_signer_seeds: &'b [&'b [u8]],
+    pub token_program: AccountInfo<'a>,
 }
 
 pub struct TokenMintToParams<'a: 'b, 'b> {
-    mint: AccountInfo<'a>,
-    destination: AccountInfo<'a>,
-    amount: u64,
-    authority: AccountInfo<'a>,
-    authority_signer_seeds: &'b [&'b [u8]],
-    token_program: AccountInfo<'a>,
+    pub mint: AccountInfo<'a>,
+    pub destination: AccountInfo<'a>,
+    pub amount: u64,
+    pub authority: AccountInfo<'a>,
+    pub authority_signer_seeds: &'b [&'b [u8]],
+    pub token_program: AccountInfo<'a>,
 }
 
 pub struct TokenBurnParams<'a: 'b, 'b> {
-    mint: AccountInfo<'a>,
-    source: AccountInfo<'a>,
-    amount: u64,
-    authority: AccountInfo<'a>,
-    authority_signer_seeds: &'b [&'b [u8]],
-    token_program: AccountInfo<'a>,
+    pub mint: AccountInfo<'a>,
+    pub source: AccountInfo<'a>,
+    pub amount: u64,
+    pub authority: AccountInfo<'a>,
+    pub authority_signer_seeds: &'b [&'b [u8]],
+    pub token_program: AccountInfo<'a>,
 }

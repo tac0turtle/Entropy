@@ -844,6 +844,7 @@ fn process_borrow(
     Ok(())
 }
 
+/// Does this help?
 #[inline(never)] // avoid stack frame limit
 pub fn process_margin_borrow(
     program_id: &Pubkey,
