@@ -844,7 +844,7 @@ fn process_borrow(
     Ok(())
 }
 
-/// Does this help?
+/// Process margin borrow is meant to be called by a margin account.
 #[inline(never)] // avoid stack frame limit
 pub fn process_margin_borrow(
     program_id: &Pubkey,
