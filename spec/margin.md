@@ -66,13 +66,13 @@ pub struct MarginAccount {
 
 The margin contract defines 6 messages, five of which can only be accessed by the trader.
 
-### InitializeAccount
+### Initialize
 
 Initialize creates a margin account on behalf of the caller.
 
 ```rust
 #[derive(Accounts)]
-pub struct InitializeAccount<'info> {
+pub struct Initialize<'info> {
     #[account(init)]
     margin_account: ProgramAccount<'info, MarginAccount>,
 }
@@ -83,18 +83,6 @@ pub struct InitializeAccount<'info> {
 Deposits funds into an obligation account to be used to open a leveraged trade.
 
 - Can only be called by the trader.
-
-    ///   0. `[]` Deposit reserve account.
-    ///   1. `[]` Borrow reserve account.
-    ///   2. `[writable]` Obligation
-    ///   3. `[writable]` Obligation token mint
-    ///   4. `[writable]` Obligation token output
-    ///   5. `[]` Obligation token owner
-    ///   6. `[]` Lending market account.
-    ///   7. `[]` Derived lending market authority.
-
-    let deposit_reserve_info = next_account_info(account_info_iter)?;
-    let borrow_reserve_info = next_account_info(account_info_iter)?;
 
 ```rust
 #[derive(Accounts)]
