@@ -6,7 +6,6 @@ pub mod dex_market;
 pub mod entrypoint;
 pub mod error;
 pub mod instruction;
-pub mod margin;
 pub mod math;
 pub mod processor;
 pub mod state;
