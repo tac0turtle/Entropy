@@ -10,8 +10,6 @@ pub mod math;
 pub mod processor;
 pub mod state;
 
-pub(crate) mod helper;
-
 // Export current sdk types for downstream users building with a different sdk version
 pub use solana_program;
 

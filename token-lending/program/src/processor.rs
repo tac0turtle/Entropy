@@ -3,12 +3,6 @@
 use crate::{
     dex_market::{DexMarket, TradeSimulator, BASE_MINT_OFFSET, QUOTE_MINT_OFFSET},
     error::LendingError,
-    helper::{
-        assert_last_update_slot, assert_rent_exempt, assert_uninitialized, spl_token_burn,
-        spl_token_init_account, spl_token_init_mint, spl_token_mint_to, spl_token_transfer,
-        unpack_mint, TokenBurnParams, TokenInitializeAccountParams, TokenInitializeMintParams,
-        TokenMintToParams, TokenTransferParams,
-    },
     instruction::{BorrowAmountType, LendingInstruction},
     math::{Decimal, TryAdd, WAD},
     state::{
@@ -22,11 +16,13 @@ use solana_program::{
     decode_error::DecodeError,
     entrypoint::ProgramResult,
     msg,
-    program_error::PrintProgramError,
+    program_error::{PrintProgramError, ProgramError},
     program_option::COption,
-    program_pack::Pack,
+    program_pack::{IsInitialized, Pack},
     pubkey::Pubkey,
     sysvar::{clock::Clock, rent::Rent, Sysvar},
+    program::{invoke, invoke_signed},
+    clock::Slot,
 };
 use spl_token::state::Account as Token;
 
@@ -1443,4 +1439,198 @@ impl PrintProgramError for LendingError {
     {
         msg!(&self.to_string());
     }
+}
+
+fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult {
+    if !rent.is_exempt(account_info.lamports(), account_info.data_len()) {
+        msg!(&rent.minimum_balance(account_info.data_len()).to_string());
+        Err(LendingError::NotRentExempt.into())
+    } else {
+        Ok(())
+    }
+}
+
+fn assert_last_update_slot(reserve: &Reserve, slot: Slot) -> ProgramResult {
+    if !reserve.last_update_slot == slot {
+        Err(LendingError::ReserveStale.into())
+    } else {
+        Ok(())
+    }
+}
+
+fn assert_uninitialized<T: Pack + IsInitialized>(
+    account_info: &AccountInfo,
+) -> Result<T, ProgramError> {
+    let account: T = T::unpack_unchecked(&account_info.data.borrow())?;
+    if account.is_initialized() {
+        Err(LendingError::AlreadyInitialized.into())
+    } else {
+        Ok(account)
+    }
+}
+
+/// Unpacks a spl_token `Mint`.
+fn unpack_mint(data: &[u8]) -> Result<spl_token::state::Mint, LendingError> {
+    spl_token::state::Mint::unpack(data).map_err(|_| LendingError::InvalidTokenMint)
+}
+
+/// Issue a spl_token `InitializeMint` instruction.
+#[inline(always)]
+fn spl_token_init_mint(params: TokenInitializeMintParams<'_, '_>) -> ProgramResult {
+    let TokenInitializeMintParams {
+        mint,
+        rent,
+        authority,
+        token_program,
+        decimals,
+    } = params;
+    let ix = spl_token::instruction::initialize_mint(
+        token_program.key,
+        mint.key,
+        authority,
+        None,
+        decimals,
+    )?;
+    let result = invoke(&ix, &[mint, rent, token_program]);
+    result.map_err(|_| LendingError::TokenInitializeMintFailed.into())
+}
+
+/// Issue a spl_token `InitializeAccount` instruction.
+#[inline(always)]
+fn spl_token_init_account(params: TokenInitializeAccountParams<'_>) -> ProgramResult {
+    let TokenInitializeAccountParams {
+        account,
+        mint,
+        owner,
+        rent,
+        token_program,
+    } = params;
+    let ix = spl_token::instruction::initialize_account(
+        token_program.key,
+        account.key,
+        mint.key,
+        owner.key,
+    )?;
+    let result = invoke(&ix, &[account, mint, owner, rent, token_program]);
+    result.map_err(|_| LendingError::TokenInitializeAccountFailed.into())
+}
+
+/// Issue a spl_token `Transfer` instruction.
+#[inline(always)]
+fn spl_token_transfer(params: TokenTransferParams<'_, '_>) -> ProgramResult {
+    let TokenTransferParams {
+        source,
+        destination,
+        authority,
+        token_program,
+        amount,
+        authority_signer_seeds,
+    } = params;
+    let result = invoke_signed(
+        &spl_token::instruction::transfer(
+            token_program.key,
+            source.key,
+            destination.key,
+            authority.key,
+            &[],
+            amount,
+        )?,
+        &[source, destination, authority, token_program],
+        &[authority_signer_seeds],
+    );
+    result.map_err(|_| LendingError::TokenTransferFailed.into())
+}
+
+/// Issue a spl_token `MintTo` instruction.
+fn spl_token_mint_to(params: TokenMintToParams<'_, '_>) -> ProgramResult {
+    let TokenMintToParams {
+        mint,
+        destination,
+        authority,
+        token_program,
+        amount,
+        authority_signer_seeds,
+    } = params;
+    let result = invoke_signed(
+        &spl_token::instruction::mint_to(
+            token_program.key,
+            mint.key,
+            destination.key,
+            authority.key,
+            &[],
+            amount,
+        )?,
+        &[mint, destination, authority, token_program],
+        &[authority_signer_seeds],
+    );
+    result.map_err(|_| LendingError::TokenMintToFailed.into())
+}
+
+/// Issue a spl_token `Burn` instruction.
+#[inline(always)]
+fn spl_token_burn(params: TokenBurnParams<'_, '_>) -> ProgramResult {
+    let TokenBurnParams {
+        mint,
+        source,
+        authority,
+        token_program,
+        amount,
+        authority_signer_seeds,
+    } = params;
+    let result = invoke_signed(
+        &spl_token::instruction::burn(
+            token_program.key,
+            source.key,
+            mint.key,
+            authority.key,
+            &[],
+            amount,
+        )?,
+        &[source, mint, authority, token_program],
+        &[authority_signer_seeds],
+    );
+    result.map_err(|_| LendingError::TokenBurnFailed.into())
+}
+
+struct TokenInitializeMintParams<'a: 'b, 'b> {
+    mint: AccountInfo<'a>,
+    rent: AccountInfo<'a>,
+    authority: &'b Pubkey,
+    decimals: u8,
+    token_program: AccountInfo<'a>,
+}
+
+struct TokenInitializeAccountParams<'a> {
+    account: AccountInfo<'a>,
+    mint: AccountInfo<'a>,
+    owner: AccountInfo<'a>,
+    rent: AccountInfo<'a>,
+    token_program: AccountInfo<'a>,
+}
+
+struct TokenTransferParams<'a: 'b, 'b> {
+    source: AccountInfo<'a>,
+    destination: AccountInfo<'a>,
+    amount: u64,
+    authority: AccountInfo<'a>,
+    authority_signer_seeds: &'b [&'b [u8]],
+    token_program: AccountInfo<'a>,
+}
+
+struct TokenMintToParams<'a: 'b, 'b> {
+    mint: AccountInfo<'a>,
+    destination: AccountInfo<'a>,
+    amount: u64,
+    authority: AccountInfo<'a>,
+    authority_signer_seeds: &'b [&'b [u8]],
+    token_program: AccountInfo<'a>,
+}
+
+struct TokenBurnParams<'a: 'b, 'b> {
+    mint: AccountInfo<'a>,
+    source: AccountInfo<'a>,
+    amount: u64,
+    authority: AccountInfo<'a>,
+    authority_signer_seeds: &'b [&'b [u8]],
+    token_program: AccountInfo<'a>,
 }

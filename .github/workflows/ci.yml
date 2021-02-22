@@ -8,7 +8,7 @@ on:
     branches:
       - master
 jobs:
-  test:
+  test-anchor:
     name: Cargo and Anchor tests
     runs-on: ubuntu-latest
     env:
@@ -94,3 +94,16 @@ jobs:
           command: clippy
           # Warn only for quicker dev, can add this back later
           # args: -- -D warnings
+  test-bpf:
+    name: test-bpf
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Toolchain setup
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+      - run: |
+          cargo test-bpf
