@@ -16,7 +16,7 @@ use spl_token::{
 use spl_token_lending::{
     instruction::{
         borrow_reserve_liquidity, deposit_reserve_liquidity, init_lending_market, init_obligation,
-        init_reserve, liquidate_obligation, BorrowAmountType,
+        init_reserve, liquidate_obligation, margin_borrow_reserve_liquidity, BorrowAmountType,
     },
     math::{Decimal, Rate, TryAdd, TryMul},
     processor::process_instruction,
@@ -440,6 +440,17 @@ pub struct BorrowArgs<'a> {
     pub obligation: &'a TestObligation,
 }
 
+pub struct MarginBorrowArgs<'a> {
+    pub deposit_reserve: &'a TestReserve,
+    pub borrow_reserve: &'a TestReserve,
+    pub borrow_amount_type: BorrowAmountType,
+    pub collateral_amount: u64,
+    pub loan_amount: u64,
+    pub dex_market: &'a TestDexMarket,
+    pub user_accounts_owner: &'a Keypair,
+    pub obligation: &'a TestObligation,
+}
+
 pub struct LiquidateArgs<'a> {
     pub repay_reserve: &'a TestReserve,
     pub withdraw_reserve: &'a TestReserve,
@@ -665,6 +676,97 @@ impl TestLendingMarket {
                 borrow_reserve_liquidity(
                     spl_token_lending::id(),
                     amount,
+                    borrow_amount_type,
+                    deposit_reserve.user_collateral_account,
+                    borrow_reserve.user_liquidity_account,
+                    deposit_reserve.pubkey,
+                    deposit_reserve.collateral_supply,
+                    deposit_reserve.collateral_fees_receiver,
+                    borrow_reserve.pubkey,
+                    borrow_reserve.liquidity_supply,
+                    self.pubkey,
+                    self.authority,
+                    user_transfer_authority.pubkey(),
+                    obligation.pubkey,
+                    obligation.token_mint,
+                    obligation.token_account,
+                    dex_market.pubkey,
+                    dex_market_orders_pubkey,
+                    memory_keypair.pubkey(),
+                    Some(deposit_reserve.collateral_host),
+                ),
+            ],
+            Some(&payer.pubkey()),
+        );
+
+        let recent_blockhash = banks_client.get_recent_blockhash().await.unwrap();
+        transaction.sign(
+            &vec![
+                payer,
+                user_accounts_owner,
+                &memory_keypair,
+                &user_transfer_authority,
+            ],
+            recent_blockhash,
+        );
+
+        assert_matches!(banks_client.process_transaction(transaction).await, Ok(()));
+    }
+
+    pub async fn margin_borrow(
+        &self,
+        banks_client: &mut BanksClient,
+        payer: &Keypair,
+        args: MarginBorrowArgs<'_>,
+    ) {
+        let memory_keypair = Keypair::new();
+        let user_transfer_authority = Keypair::new();
+
+        let MarginBorrowArgs {
+            borrow_reserve,
+            deposit_reserve,
+            borrow_amount_type,
+            collateral_amount,
+            loan_amount,
+            dex_market,
+            user_accounts_owner,
+            obligation,
+        } = args;
+
+        let dex_market_orders_pubkey = if deposit_reserve.dex_market.is_none() {
+            dex_market.asks_pubkey
+        } else {
+            dex_market.bids_pubkey
+        };
+
+        let approve_amount = if borrow_amount_type == BorrowAmountType::MarginBorrowAmount {
+            collateral_amount
+        } else {
+            get_token_balance(banks_client, deposit_reserve.user_collateral_account).await
+        };
+
+        let mut transaction = Transaction::new_with_payer(
+            &[
+                approve(
+                    &spl_token::id(),
+                    &deposit_reserve.user_collateral_account,
+                    &user_transfer_authority.pubkey(),
+                    &user_accounts_owner.pubkey(),
+                    &[],
+                    approve_amount,
+                )
+                .unwrap(),
+                create_account(
+                    &payer.pubkey(),
+                    &memory_keypair.pubkey(),
+                    0,
+                    65548,
+                    &spl_token_lending::id(),
+                ),
+                margin_borrow_reserve_liquidity(
+                    spl_token_lending::id(),
+                    collateral_amount,
+                    loan_amount,
                     borrow_amount_type,
                     deposit_reserve.user_collateral_account,
                     borrow_reserve.user_liquidity_account,
