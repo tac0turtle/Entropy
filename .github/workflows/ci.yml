@@ -105,5 +105,13 @@ jobs:
           profile: minimal
           toolchain: nightly
           override: true
+      - name: Set env vars
+        run: |
+          source scripts/solana-version.sh
+          echo "SOLANA_VERSION=$solana_version" >> $GITHUB_ENV
+      - name: Install dependencies
+        run: |
+          ./scripts/build-deps.sh
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
       - run: |
           cargo test-bpf
