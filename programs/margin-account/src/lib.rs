@@ -8,7 +8,7 @@ pub mod margin_account {
     use super::*;
 
     /// Initialize new margin account under a specific trader's address.
-    pub fn initialize(ctx: Context<Initialize>, trader: Pubkey) -> ProgramResult {
+    pub fn initialize_account(ctx: Context<InitializeAccount>, trader: Pubkey) -> ProgramResult {
         let margin_account = &mut ctx.accounts.margin_account;
         margin_account.trader = trader;
         Ok(())
@@ -44,7 +44,7 @@ pub mod margin_account {
 
 /// Initializes new margin account.
 #[derive(Accounts)]
-pub struct Initialize<'info> {
+pub struct InitializeAccount<'info> {
     #[account(init)]
     margin_account: ProgramAccount<'info, MarginAccount>,
     rent: Sysvar<'info, Rent>,
