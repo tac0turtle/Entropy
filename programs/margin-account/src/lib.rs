@@ -32,9 +32,13 @@ pub mod margin_account {
         )?;
         Ok(())
     }
-    /// Open a leveraged position.
-    pub fn open_position(_ctx: Context<OpenPosition>) -> ProgramResult {
-        // TODO
+    /// Open a leveraged position on serum.
+    pub fn open_position_amm(
+        _ctx: Context<OpenPositionAMM>,
+        amount_in: u64,
+        minimum_amount_out: u64,
+    ) -> ProgramResult {
+        invoke(&spl_token_swap::instruction::swap())?;
         Ok(())
     }
     /// Close an open leveraged position.
@@ -96,11 +100,41 @@ pub struct Withdraw<'info> {
 }
 
 #[derive(Accounts)]
-pub struct OpenPosition<'info> {
+pub struct OpenPositionAMM<'info> {
     // TODO
     #[account(signer)]
-    authority: AccountInfo<'info>,
+    user_authority: AccountInfo<'info>,
+    swap_info: AccountInfo<'info>,
+    swap_authority: AccountInfo<'info>,
+    #[account(mut)]
+    source: AccountInfo<'info>,
+    #[account(mut)]
+    swap_source: AccountInfo<'info>,
+    #[account(mut)]
+    swap_dest: AccountInfo<'info>,
+    #[account(mut)]
+    pool_mint: AccountInfo<'info>,
+    #[account(mut)]
+    pool_fee: AccountInfo<'info>,
+    token_program: AccountInfo<'info>,
 }
+
+///   3. `[writable]` token_(A|B) SOURCE Account, amount is transferable by user transfer authority,
+///   4. `[writable]` token_(A|B) Base Account to swap INTO.  Must be the SOURCE token.
+///   5. `[writable]` token_(A|B) Base Account to swap FROM.  Must be the DESTINATION token.
+///   6. `[writable]` token_(A|B) DESTINATION Account assigned to USER as the owner.
+///   7. `[writable]` Pool token mint, to generate trading fees
+///   8. `[writable]` Fee account, to receive trading fees
+///   9. '[]` Token program id
+///   10 `[optional, writable]` Host fee account to receive additional trading fees
+
+//         let source_info = next_account_info(account_info_iter)?;
+//         let swap_source_info = next_account_info(account_info_iter)?;
+//         let swap_destination_info = next_account_info(account_info_iter)?;
+//         let destination_info = next_account_info(account_info_iter)?;
+//         let pool_mint_info = next_account_info(account_info_iter)?;
+//         let pool_fee_account_info = next_account_info(account_info_iter)?;
+//         let token_program_info = next_account_info(account_info_iter)?;
 
 #[derive(Accounts)]
 pub struct ClosePosition<'info> {
