@@ -113,7 +113,10 @@ Trade does multiple things in a single step. When a user would like conduct a tr
 ```rust
 #[derive(Accounts)]
 pub struct Trade<'info> {
-
+    pub side Side
+    pub order_type OrderType
+    pub limit_price NonZeroU64
+    pub collateral_ratio Ratio
 }
 ```
 
