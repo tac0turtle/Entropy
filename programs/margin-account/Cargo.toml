@@ -17,5 +17,5 @@ anchor-lang = { git = "https://github.com/project-serum/anchor", features = [
     "derive"
 ] }
 anchor-spl = { git = "https://github.com/project-serum/anchor" }
-spl-token-lending = { path = "../../token-lending/program" }
+spl-token-lending = { path = "../../token-lending/program", features = ["no-entrypoint"] }
 solana-program = "1.5.0"
