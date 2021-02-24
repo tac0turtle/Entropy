@@ -2,6 +2,7 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, TokenAccount};
+use solana_program::program::invoke;
 
 #[program]
 pub mod margin_account {
@@ -14,8 +15,21 @@ pub mod margin_account {
         Ok(())
     }
     /// Initialize a collateral account to be used to open a position.
-    pub fn init_obligation(_ctx: Context<InitObligation>) -> ProgramResult {
-        // TODO
+    pub fn init_obligation(ctx: Context<InitObligation>) -> ProgramResult {
+        // Initialize the obligation through the token lending program.
+        invoke(
+            &spl_token_lending::instruction::init_obligation(
+                *ctx.accounts.lending_program.key,
+                *ctx.accounts.deposit_reserve.key,
+                *ctx.accounts.borrow_reserve.key,
+                *ctx.accounts.lending_market.key,
+                *ctx.accounts.obligation.key,
+                *ctx.accounts.obligation_token_mint.key,
+                *ctx.accounts.obligation_token_output.key,
+                *ctx.accounts.obligation_token_owner.key,
+            ),
+            &ctx.accounts.to_account_infos(),
+        )?;
         Ok(())
     }
     /// Open a leveraged position.
@@ -53,9 +67,20 @@ pub struct Initialize<'info> {
 /// Initialize new margin collateral obligation.
 #[derive(Accounts)]
 pub struct InitObligation<'info> {
-    // TODO
-    #[account(signer)]
-    authority: AccountInfo<'info>,
+    lending_program: AccountInfo<'info>,
+    deposit_reserve: AccountInfo<'info>,
+    borrow_reserve: AccountInfo<'info>,
+    // ? This probably needs to be initialized
+    obligation: AccountInfo<'info>,
+    // ?
+    #[account(mut)]
+    obligation_token_mint: AccountInfo<'info>,
+    // ?
+    #[account(mut)]
+    obligation_token_output: AccountInfo<'info>,
+    obligation_token_owner: AccountInfo<'info>,
+    lending_market: AccountInfo<'info>,
+    lending_market_authority: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
