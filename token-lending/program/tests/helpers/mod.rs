@@ -42,6 +42,7 @@ pub const TEST_RESERVE_CONFIG: ReserveConfig = ReserveConfig {
         /// 0.00001% (Aave borrow fee)
         host_fee_percentage: 20,
     },
+    max_leverage: 5,
 };
 
 pub const USDC_MINT: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";

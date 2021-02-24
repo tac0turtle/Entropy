@@ -125,6 +125,9 @@ pub enum LendingError {
     /// Token burn failed
     #[error("Token burn failed")]
     TokenBurnFailed,
+    /// Leverage too great
+    #[error("Leverage requested too high")]
+    LeverageTooHigh,
 }
 
 impl From<LendingError> for ProgramError {

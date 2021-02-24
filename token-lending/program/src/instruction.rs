@@ -254,6 +254,7 @@ impl LendingInstruction {
                 let (max_borrow_rate, rest) = Self::unpack_u8(rest)?;
                 let (borrow_fee_wad, rest) = Self::unpack_u64(rest)?;
                 let (host_fee_percentage, _rest) = Self::unpack_u8(rest)?;
+                let (max_leverage, _rest) = Self::unpack_u8(rest)?;
                 Self::InitReserve {
                     liquidity_amount,
                     config: ReserveConfig {
@@ -268,6 +269,7 @@ impl LendingInstruction {
                             borrow_fee_wad,
                             host_fee_percentage,
                         },
+                        max_leverage,
                     },
                 }
             }
@@ -365,6 +367,7 @@ impl LendingInstruction {
                                 borrow_fee_wad,
                                 host_fee_percentage,
                             },
+                        max_leverage,
                     },
             } => {
                 buf.push(1);
@@ -378,6 +381,7 @@ impl LendingInstruction {
                 buf.extend_from_slice(&max_borrow_rate.to_le_bytes());
                 buf.extend_from_slice(&borrow_fee_wad.to_le_bytes());
                 buf.extend_from_slice(&host_fee_percentage.to_le_bytes());
+                buf.extend_from_slice(&max_leverage.to_le_bytes());
             }
             Self::InitObligation => {
                 buf.push(2);

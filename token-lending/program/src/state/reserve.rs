@@ -199,7 +199,19 @@ impl Reserve {
                 }
                 (borrow_amount, collateral_amount)
             }
-            BorrowAmountType::MarginBorrowAmount => (borrow_amount, collateral_amount),
+            BorrowAmountType::MarginBorrowAmount => {
+                let collateral_amount = collateral_amount;
+                let borrow_amount = self.allowed_leverage_for_collateral(
+                    collateral_amount,
+                    borrow_amount,
+                    token_converter,
+                )?;
+                if borrow_amount == 0 {
+                    return Err(LendingError::InvalidAmount.into());
+                }
+
+                (borrow_amount, collateral_amount)
+            }
             BorrowAmountType::LiquidityBorrowAmount => {
                 let borrow_amount = collateral_amount;
                 let collateral_amount = self.required_collateral_for_borrow(
@@ -244,6 +256,31 @@ impl Reserve {
         let borrow_amount = converter
             .convert(liquidity_amount, &self.liquidity.mint_pubkey)?
             .try_floor_u64()?;
+
+        Ok(borrow_amount)
+    }
+
+    /// calculate the max leverage which is being asked for
+    pub fn allowed_leverage_for_collateral(
+        &self,
+        collateral_amount: u64,
+        borrow_amount: u64,
+        converter: impl TokenConverter,
+    ) -> Result<u64, ProgramError> {
+        let collateral_exchange_rate = self.collateral_exchange_rate()?;
+        let borrow_amount = Decimal::from(borrow_amount)
+            .try_mul(Rate::from_percent(self.config.loan_to_value_ratio))?;
+
+        let requested_amount =
+            collateral_exchange_rate.decimal_collateral_to_liquidity(borrow_amount)?;
+
+        let borrow_amount = converter
+            .convert(requested_amount, &self.liquidity.mint_pubkey)?
+            .try_floor_u64()?;
+
+        if borrow_amount > 5 * collateral_amount {
+            return Err(LendingError::LeverageTooHigh.into());
+        }
 
         Ok(borrow_amount)
     }
@@ -543,6 +580,8 @@ pub struct ReserveConfig {
     pub max_borrow_rate: u8,
     /// Program owner fees assessed, separate from gains due to interest accrual
     pub fees: ReserveFees,
+    /// leverage should be capped per lending pool This can be influenced by a variety of items
+    pub max_leverage: u8,
 }
 
 /// Additional fee information on a reserve
@@ -608,9 +647,9 @@ impl IsInitialized for Reserve {
     }
 }
 
-const RESERVE_LEN: usize = 602;
+const RESERVE_LEN: usize = 603;
 impl Pack for Reserve {
-    const LEN: usize = 602;
+    const LEN: usize = 603;
 
     /// Unpacks a byte buffer into a [ReserveInfo](struct.ReserveInfo.html).
     fn unpack_from_slice(input: &[u8]) -> Result<Self, ProgramError> {
@@ -640,9 +679,11 @@ impl Pack for Reserve {
             total_borrows,
             available_liquidity,
             collateral_mint_supply,
+            max_leverage,
             __padding,
         ) = array_refs![
             input, 1, 8, 32, 32, 1, 32, 32, 32, 32, 36, 1, 1, 1, 1, 1, 1, 1, 8, 1, 16, 16, 8, 8,
+            1, //todo is this right?
             300
         ];
         Ok(Self {
@@ -676,6 +717,7 @@ impl Pack for Reserve {
                     borrow_fee_wad: u64::from_le_bytes(*borrow_fee_wad),
                     host_fee_percentage: u8::from_le_bytes(*host_fee_percentage),
                 },
+                max_leverage: u8::from_le_bytes(*max_leverage),
             },
         })
     }
@@ -706,10 +748,11 @@ impl Pack for Reserve {
             total_borrows,
             available_liquidity,
             collateral_mint_supply,
+            max_leverage,
             _padding,
         ) = mut_array_refs![
             output, 1, 8, 32, 32, 1, 32, 32, 32, 32, 36, 1, 1, 1, 1, 1, 1, 1, 8, 1, 16, 16, 8, 8,
-            300
+            1, 300
         ];
         *version = self.version.to_le_bytes();
         *last_update_slot = self.last_update_slot.to_le_bytes();
@@ -740,6 +783,7 @@ impl Pack for Reserve {
         *max_borrow_rate = self.config.max_borrow_rate.to_le_bytes();
         *borrow_fee_wad = self.config.fees.borrow_fee_wad.to_le_bytes();
         *host_fee_percentage = self.config.fees.host_fee_percentage.to_le_bytes();
+        *max_leverage = self.config.max_leverage.to_le_bytes();
     }
 }
 
