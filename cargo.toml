@@ -1,5 +1,0 @@
-[workspace]
-members = [
-  "token-lending/program",
-  "programs/*",
-]
