@@ -69,7 +69,7 @@ pub fn process_instruction(
             loan_amount,
             amount_type,
         } => {
-            msg!("Instruction: Borrow");
+            msg!("Instruction: Margin Borrow");
             process_margin_borrow(
                 program_id,
                 collateral_amount,

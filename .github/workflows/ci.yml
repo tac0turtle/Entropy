@@ -94,24 +94,24 @@ jobs:
           command: clippy
           # Warn only for quicker dev, can add this back later
           # args: -- -D warnings
-  test-bpf:
-    name: test-bpf
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Toolchain setup
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: nightly
-          override: true
-      - name: Set env vars
-        run: |
-          source scripts/solana-version.sh
-          echo "SOLANA_VERSION=$solana_version" >> $GITHUB_ENV
-      - name: Install dependencies
-        run: |
-          ./scripts/build-deps.sh
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
-      - run: |
-          cargo test-bpf
+  # test-bpf:
+  #   name: test-bpf
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Toolchain setup
+  #       uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         toolchain: nightly
+  #         override: true
+  #     - name: Set env vars
+  #       run: |
+  #         source scripts/solana-version.sh
+  #         echo "SOLANA_VERSION=$solana_version" >> $GITHUB_ENV
+  #     - name: Install dependencies
+  #       run: |
+  #         ./scripts/build-deps.sh
+  #         echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+  #     - run: |
+  #         cargo test-bpf
