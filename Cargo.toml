@@ -1,11 +1,6 @@
 [workspace]
 members = [
-<<<<<<< HEAD
-  "token-lending/program",
-  "programs/*",
-=======
     "programs/*",
     "token-lending/program",
     "token-lending/client",
->>>>>>> master
 ]
