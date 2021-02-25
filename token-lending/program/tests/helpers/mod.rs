@@ -747,7 +747,7 @@ impl TestLendingMarket {
                     &user_transfer_authority.pubkey(),
                     &user_accounts_owner.pubkey(),
                     &[],
-                    approve_amount,
+                    collateral_amount,
                 )
                 .unwrap(),
                 create_account(
