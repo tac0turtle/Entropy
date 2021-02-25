@@ -739,12 +739,6 @@ impl TestLendingMarket {
             dex_market.bids_pubkey
         };
 
-        let approve_amount = if borrow_amount_type == BorrowAmountType::MarginBorrowAmount {
-            collateral_amount
-        } else {
-            get_token_balance(banks_client, deposit_reserve.user_collateral_account).await
-        };
-
         let mut transaction = Transaction::new_with_payer(
             &[
                 approve(
@@ -753,7 +747,7 @@ impl TestLendingMarket {
                     &user_transfer_authority.pubkey(),
                     &user_accounts_owner.pubkey(),
                     &[],
-                    approve_amount,
+                    collateral_amount,
                 )
                 .unwrap(),
                 create_account(
