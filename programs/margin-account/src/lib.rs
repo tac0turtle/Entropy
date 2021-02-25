@@ -9,11 +9,16 @@ pub mod margin_account {
     use super::*;
 
     /// Initialize new margin account under a specific trader's address.
-    pub fn initialize(ctx: Context<Initialize>, trader: Pubkey) -> ProgramResult {
+    #[access_control(Initialize::accounts(&ctx, nonce))]
+    pub fn initialize(ctx: Context<Initialize>, trader: Pubkey, nonce: u8) -> ProgramResult {
         let margin_account = &mut ctx.accounts.margin_account;
         margin_account.trader = trader;
+        margin_account.vault = *ctx.accounts.vault.to_account_info().key;
+        margin_account.nonce = nonce;
+
         Ok(())
     }
+
     /// Initialize a collateral account to be used to open a position.
     pub fn init_obligation(ctx: Context<InitObligation>) -> ProgramResult {
         // Initialize the obligation through the token lending program.
@@ -30,8 +35,10 @@ pub mod margin_account {
             ),
             &ctx.accounts.to_account_infos(),
         )?;
+
         Ok(())
     }
+
     /// Open a leveraged position on serum.
     pub fn open_position_amm(
         ctx: Context<OpenPositionAMM>,
@@ -44,22 +51,28 @@ pub mod margin_account {
         };
 
         let instruction = &spl_token_swap::instruction::swap(
-            &ctx.accounts.user_authority.key,
-            &ctx.accounts.token_program.key,
-            &ctx.accounts.swap_info.key,
-            &ctx.accounts.swap_authority.key,
-            &ctx.accounts.user_authority.key,
-            &ctx.accounts.swap_source.key,
-            &ctx.accounts.swap_source.key,
-            &ctx.accounts.swap_dest.key,
-            &ctx.accounts.dest.key,
-            &ctx.accounts.pool_mint.key,
-            &ctx.accounts.pool_fee.key,
-            &ctx.accounts.host_fee.key,
+            ctx.accounts.user_authority.key,
+            ctx.accounts.token_program.key,
+            ctx.accounts.swap_info.key,
+            ctx.accounts.swap_authority.key,
+            ctx.accounts.user_authority.key,
+            ctx.accounts.swap_source.key,
+            ctx.accounts.swap_source.key,
+            ctx.accounts.swap_dest.key,
+            ctx.accounts.dest.key,
+            ctx.accounts.pool_mint.key,
+            ctx.accounts.pool_fee.key,
+            Some(ctx.accounts.host_fee.key),
             swap,
         )?;
 
+        // let seeds = &[
+        //     ctx.accounts.margin_account.to_account_info().key.as_ref(),
+        //     &[ctx.accounts.margin_account.nonce],
+        // ]; todo: do we need seeds
+
         invoke(instruction, &ctx.accounts.to_account_infos())?;
+
         Ok(())
     }
     /// Close an open leveraged position.
@@ -86,7 +99,27 @@ pub mod margin_account {
 pub struct Initialize<'info> {
     #[account(init)]
     margin_account: ProgramAccount<'info, MarginAccount>,
+    #[account(mut)]
+    vault: CpiAccount<'info, TokenAccount>,
     rent: Sysvar<'info, Rent>,
+}
+
+impl<'info> Initialize<'info> {
+    fn accounts(ctx: &Context<Initialize>, nonce: u8) -> Result<()> {
+        let margin_authority = Pubkey::create_program_address(
+            &[
+                ctx.accounts.margin_account.to_account_info().key.as_ref(),
+                &[nonce],
+            ],
+            ctx.program_id,
+        )
+        .map_err(|_| ErrorCode::InvalidProgramAddress)?;
+        if ctx.accounts.vault.owner != margin_authority {
+            return Err(ErrorCode::InvalidVaultOwner)?;
+        }
+
+        Ok(())
+    }
 }
 
 /// Initialize new margin collateral obligation.
@@ -139,11 +172,10 @@ pub struct OpenPositionAMM<'info> {
     pool_mint: AccountInfo<'info>,
     #[account(mut)]
     pool_fee: AccountInfo<'info>,
-    #[account(mut)]
     host_fee: AccountInfo<'info>,
     /// accounts needed to access funds from token vault
     #[account(mut)]
-    margin_account: AccountInfo<'info>,
+    margin_account: ProgramAccount<'info, MarginAccount>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
     #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
@@ -188,4 +220,12 @@ pub struct Position {
     pub obligation_account: Pubkey,
     /// Indicates whether an obligation account has been used to open a leveraged position.
     pub open: bool,
+}
+
+#[error]
+pub enum ErrorCode {
+    #[msg("Invalid program address. Did you provide the correct nonce?")]
+    InvalidProgramAddress,
+    #[msg("Invalid margin owner.")]
+    InvalidVaultOwner,
 }
