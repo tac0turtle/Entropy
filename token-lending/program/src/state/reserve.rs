@@ -183,14 +183,15 @@ impl Reserve {
     /// Create new loan
     pub fn create_loan(
         &self,
-        token_amount: u64,
+        collateral_amount: u64,
+        borrow_amount: u64,
         token_amount_type: BorrowAmountType,
         token_converter: impl TokenConverter,
         borrow_amount_token_mint: &Pubkey,
     ) -> Result<LoanResult, ProgramError> {
         let (borrow_amount, mut collateral_amount) = match token_amount_type {
             BorrowAmountType::CollateralDepositAmount => {
-                let collateral_amount = token_amount;
+                let collateral_amount = collateral_amount;
                 let borrow_amount =
                     self.allowed_borrow_for_collateral(collateral_amount, token_converter)?;
                 if borrow_amount == 0 {
@@ -198,8 +199,9 @@ impl Reserve {
                 }
                 (borrow_amount, collateral_amount)
             }
+            BorrowAmountType::MarginBorrowAmount => (borrow_amount, collateral_amount),
             BorrowAmountType::LiquidityBorrowAmount => {
-                let borrow_amount = token_amount;
+                let borrow_amount = collateral_amount;
                 let collateral_amount = self.required_collateral_for_borrow(
                     borrow_amount,
                     borrow_amount_token_mint,

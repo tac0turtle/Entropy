@@ -64,6 +64,20 @@ pub fn process_instruction(
             msg!("Instruction: Borrow");
             process_borrow(program_id, amount, amount_type, accounts)
         }
+        LendingInstruction::MarginBorrowReserveLiquidity {
+            collateral_amount,
+            loan_amount,
+            amount_type,
+        } => {
+            msg!("Instruction: Margin Borrow");
+            process_margin_borrow(
+                program_id,
+                collateral_amount,
+                loan_amount,
+                amount_type,
+                accounts,
+            )
+        }
         LendingInstruction::RepayReserveLiquidity { liquidity_amount } => {
             msg!("Instruction: Repay");
             process_repay(program_id, liquidity_amount, accounts)
@@ -740,7 +754,249 @@ fn process_borrow(
 
     let loan = deposit_reserve.create_loan(
         token_amount,
+        0,
         token_amount_type,
+        trade_simulator,
+        &borrow_reserve.liquidity.mint_pubkey,
+    )?;
+
+    borrow_reserve.liquidity.borrow(loan.borrow_amount)?;
+    obligation.borrowed_liquidity_wads = obligation
+        .borrowed_liquidity_wads
+        .try_add(Decimal::from(loan.borrow_amount))?;
+    obligation.deposited_collateral_tokens += loan.collateral_amount;
+
+    Obligation::pack(obligation, &mut obligation_info.data.borrow_mut())?;
+    Reserve::pack(borrow_reserve, &mut borrow_reserve_info.data.borrow_mut())?;
+
+    let authority_signer_seeds = &[
+        lending_market_info.key.as_ref(),
+        &[lending_market.bump_seed],
+    ];
+    let lending_market_authority_pubkey =
+        Pubkey::create_program_address(authority_signer_seeds, program_id)?;
+    if lending_market_authority_info.key != &lending_market_authority_pubkey {
+        return Err(LendingError::InvalidMarketAuthority.into());
+    }
+
+    // deposit collateral
+    spl_token_transfer(TokenTransferParams {
+        source: source_collateral_info.clone(),
+        destination: deposit_reserve_collateral_supply_info.clone(),
+        amount: loan.collateral_amount,
+        authority: user_transfer_authority_info.clone(),
+        authority_signer_seeds: &[],
+        token_program: token_program_id.clone(),
+    })?;
+
+    // transfer host fees if host is specified
+    let mut owner_fee = loan.origination_fee;
+    if let Ok(host_fee_recipient) = next_account_info(account_info_iter) {
+        if loan.host_fee > 0 {
+            owner_fee -= loan.host_fee;
+            spl_token_transfer(TokenTransferParams {
+                source: source_collateral_info.clone(),
+                destination: host_fee_recipient.clone(),
+                amount: loan.host_fee,
+                authority: user_transfer_authority_info.clone(),
+                authority_signer_seeds: &[],
+                token_program: token_program_id.clone(),
+            })?;
+        }
+    }
+
+    // transfer remaining fees to owner
+    if owner_fee > 0 {
+        spl_token_transfer(TokenTransferParams {
+            source: source_collateral_info.clone(),
+            destination: deposit_reserve_collateral_fees_receiver_info.clone(),
+            amount: owner_fee,
+            authority: user_transfer_authority_info.clone(),
+            authority_signer_seeds: &[],
+            token_program: token_program_id.clone(),
+        })?;
+    }
+
+    // borrow liquidity
+    spl_token_transfer(TokenTransferParams {
+        source: borrow_reserve_liquidity_supply_info.clone(),
+        destination: destination_liquidity_info.clone(),
+        amount: loan.borrow_amount,
+        authority: lending_market_authority_info.clone(),
+        authority_signer_seeds,
+        token_program: token_program_id.clone(),
+    })?;
+
+    // mint obligation tokens to output account
+    spl_token_mint_to(TokenMintToParams {
+        mint: obligation_token_mint_info.clone(),
+        destination: obligation_token_output_info.clone(),
+        amount: loan.collateral_amount,
+        authority: lending_market_authority_info.clone(),
+        authority_signer_seeds,
+        token_program: token_program_id.clone(),
+    })?;
+
+    Ok(())
+}
+
+/// Process margin borrow is meant to be called by a margin account.
+#[inline(never)] // avoid stack frame limit
+pub fn process_margin_borrow(
+    program_id: &Pubkey,
+    collateral_amount: u64,
+    loan_amount: u64,
+    amount_type: BorrowAmountType,
+    accounts: &[AccountInfo],
+) -> ProgramResult {
+    if collateral_amount == 0 {
+        return Err(LendingError::InvalidAmount.into());
+    }
+
+    let account_info_iter = &mut accounts.iter();
+    let source_collateral_info = next_account_info(account_info_iter)?;
+    let destination_liquidity_info = next_account_info(account_info_iter)?;
+    let deposit_reserve_info = next_account_info(account_info_iter)?;
+    let deposit_reserve_collateral_supply_info = next_account_info(account_info_iter)?;
+    let deposit_reserve_collateral_fees_receiver_info = next_account_info(account_info_iter)?;
+    let borrow_reserve_info = next_account_info(account_info_iter)?;
+    let borrow_reserve_liquidity_supply_info = next_account_info(account_info_iter)?;
+    let obligation_info = next_account_info(account_info_iter)?;
+    let obligation_token_mint_info = next_account_info(account_info_iter)?;
+    let obligation_token_output_info = next_account_info(account_info_iter)?;
+    let lending_market_info = next_account_info(account_info_iter)?;
+    let lending_market_authority_info = next_account_info(account_info_iter)?;
+    let user_transfer_authority_info = next_account_info(account_info_iter)?;
+    let dex_market_info = next_account_info(account_info_iter)?;
+    let dex_market_orders_info = next_account_info(account_info_iter)?;
+    let memory = next_account_info(account_info_iter)?;
+    let clock = &Clock::from_account_info(next_account_info(account_info_iter)?)?;
+    let token_program_id = next_account_info(account_info_iter)?;
+
+    // Ensure memory is owned by this program so that we don't have to zero it out
+    if memory.owner != program_id {
+        return Err(LendingError::InvalidAccountOwner.into());
+    }
+
+    let lending_market = LendingMarket::unpack(&lending_market_info.data.borrow())?;
+    if lending_market_info.owner != program_id {
+        return Err(LendingError::InvalidAccountOwner.into());
+    }
+    if &lending_market.token_program_id != token_program_id.key {
+        return Err(LendingError::InvalidTokenProgram.into());
+    }
+
+    let deposit_reserve = Reserve::unpack(&deposit_reserve_info.data.borrow())?;
+    if deposit_reserve_info.owner != program_id {
+        return Err(LendingError::InvalidAccountOwner.into());
+    }
+    if &deposit_reserve.lending_market != lending_market_info.key {
+        msg!("Invalid reserve lending market account");
+        return Err(LendingError::InvalidAccountInput.into());
+    }
+
+    let mut borrow_reserve = Reserve::unpack(&borrow_reserve_info.data.borrow())?;
+    if borrow_reserve_info.owner != program_id {
+        return Err(LendingError::InvalidAccountOwner.into());
+    }
+    if borrow_reserve.lending_market != deposit_reserve.lending_market {
+        return Err(LendingError::LendingMarketMismatch.into());
+    }
+
+    if deposit_reserve.config.loan_to_value_ratio == 0 {
+        return Err(LendingError::ReserveCollateralDisabled.into());
+    }
+    if deposit_reserve_info.key == borrow_reserve_info.key {
+        return Err(LendingError::DuplicateReserve.into());
+    }
+    if deposit_reserve.liquidity.mint_pubkey == borrow_reserve.liquidity.mint_pubkey {
+        return Err(LendingError::DuplicateReserveMint.into());
+    }
+    if &borrow_reserve.liquidity.supply_pubkey != borrow_reserve_liquidity_supply_info.key {
+        msg!("Invalid borrow reserve liquidity supply account input");
+        return Err(LendingError::InvalidAccountInput.into());
+    }
+    if &deposit_reserve.collateral.supply_pubkey != deposit_reserve_collateral_supply_info.key {
+        msg!("Invalid deposit reserve collateral supply account input");
+        return Err(LendingError::InvalidAccountInput.into());
+    }
+    if &deposit_reserve.collateral.supply_pubkey == source_collateral_info.key {
+        msg!("Cannot use deposit reserve collateral supply as source account input");
+        return Err(LendingError::InvalidAccountInput.into());
+    }
+    if &deposit_reserve.collateral.fees_receiver
+        != deposit_reserve_collateral_fees_receiver_info.key
+    {
+        msg!("Invalid deposit reserve collateral fees receiver account");
+        return Err(LendingError::InvalidAccountInput.into());
+    }
+    if &borrow_reserve.liquidity.supply_pubkey == destination_liquidity_info.key {
+        msg!("Cannot use borrow reserve liquidity supply as destination account input");
+        return Err(LendingError::InvalidAccountInput.into());
+    }
+
+    // TODO: handle case when neither reserve is the quote currency
+    if borrow_reserve.dex_market.is_none() && deposit_reserve.dex_market.is_none() {
+        msg!("One reserve must have a dex market");
+        return Err(LendingError::InvalidAccountInput.into());
+    }
+    if let COption::Some(dex_market_pubkey) = borrow_reserve.dex_market {
+        if &dex_market_pubkey != dex_market_info.key {
+            msg!("Invalid dex market account input");
+            return Err(LendingError::InvalidAccountInput.into());
+        }
+    }
+    if let COption::Some(dex_market_pubkey) = deposit_reserve.dex_market {
+        if &dex_market_pubkey != dex_market_info.key {
+            msg!("Invalid dex market account input");
+            return Err(LendingError::InvalidAccountInput.into());
+        }
+    }
+
+    let mut obligation = Obligation::unpack(&obligation_info.data.borrow())?;
+    if obligation_info.owner != program_id {
+        return Err(LendingError::InvalidAccountOwner.into());
+    }
+    if &obligation.borrow_reserve != borrow_reserve_info.key {
+        msg!("Borrow reserve input doesn't match existing obligation borrow reserve");
+        return Err(LendingError::InvalidAccountInput.into());
+    }
+    if &obligation.collateral_reserve != deposit_reserve_info.key {
+        msg!("Collateral reserve input doesn't match existing obligation collateral reserve");
+        return Err(LendingError::InvalidAccountInput.into());
+    }
+
+    unpack_mint(&obligation_token_mint_info.data.borrow())?;
+    if &obligation.token_mint != obligation_token_mint_info.key {
+        msg!("Obligation token mint input doesn't match existing obligation token mint");
+        return Err(LendingError::InvalidTokenMint.into());
+    }
+
+    let obligation_token_output = Token::unpack(&obligation_token_output_info.data.borrow())?;
+    if obligation_token_output_info.owner != token_program_id.key {
+        return Err(LendingError::InvalidTokenOwner.into());
+    }
+    if &obligation_token_output.mint != obligation_token_mint_info.key {
+        return Err(LendingError::InvalidTokenMint.into());
+    }
+
+    assert_last_update_slot(&borrow_reserve, clock.slot)?;
+    assert_last_update_slot(&deposit_reserve, clock.slot)?;
+    obligation.accrue_interest(borrow_reserve.cumulative_borrow_rate_wads)?;
+
+    let trade_simulator = TradeSimulator::new(
+        dex_market_info,
+        dex_market_orders_info,
+        memory,
+        &lending_market.quote_token_mint,
+        &borrow_reserve.liquidity.mint_pubkey,
+        &deposit_reserve.liquidity.mint_pubkey,
+    )?;
+
+    let loan = deposit_reserve.create_loan(
+        collateral_amount,
+        loan_amount,
+        amount_type,
         trade_simulator,
         &borrow_reserve.liquidity.mint_pubkey,
     )?;
@@ -1176,6 +1432,15 @@ fn process_accrue_interest(program_id: &Pubkey, accounts: &[AccountInfo]) -> Pro
     Ok(())
 }
 
+impl PrintProgramError for LendingError {
+    fn print<E>(&self)
+    where
+        E: 'static + std::error::Error + DecodeError<E> + PrintProgramError + FromPrimitive,
+    {
+        msg!(&self.to_string());
+    }
+}
+
 fn assert_rent_exempt(rent: &Rent, account_info: &AccountInfo) -> ProgramResult {
     if !rent.is_exempt(account_info.lamports(), account_info.data_len()) {
         msg!(&rent.minimum_balance(account_info.data_len()).to_string());
@@ -1368,13 +1633,4 @@ struct TokenBurnParams<'a: 'b, 'b> {
     authority: AccountInfo<'a>,
     authority_signer_seeds: &'b [&'b [u8]],
     token_program: AccountInfo<'a>,
-}
-
-impl PrintProgramError for LendingError {
-    fn print<E>(&self)
-    where
-        E: 'static + std::error::Error + DecodeError<E> + PrintProgramError + FromPrimitive,
-    {
-        msg!(&self.to_string());
-    }
 }

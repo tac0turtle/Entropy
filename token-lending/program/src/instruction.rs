@@ -21,6 +21,8 @@ pub enum BorrowAmountType {
     LiquidityBorrowAmount,
     /// Treat amount as amount of collateral tokens to deposit
     CollateralDepositAmount,
+    /// Treat the amount as a margin trade loan
+    MarginBorrowAmount,
 }
 
 /// Instructions supported by the lending program.
@@ -145,6 +147,37 @@ pub enum LendingInstruction {
         amount_type: BorrowAmountType,
     },
 
+    /// Borrow tokens from a reserve. The number of borrowed tokens
+    /// is calculated by market price. There is no debt obligation
+    /// because the loan is given to a partially protocol controlled account.
+    ///
+    ///   0. `[writable]` Source collateral token account, minted by deposit reserve collateral mint,
+    ///                     $authority can transfer $collateral_amount
+    ///   1. `[writable]` Destination liquidity token account, minted by borrow reserve liquidity mint
+    ///   2. `[]` Deposit reserve account.
+    ///   3. `[writable]` Deposit reserve collateral supply SPL Token account
+    ///   4. `[writable]` Deposit reserve collateral fee receiver account.
+    ///                     Must be the fee account specified at InitReserve.
+    ///   5. `[writable]` Borrow reserve account.
+    ///   6. `[writable]` Borrow reserve liquidity supply SPL Token account
+    ///   10 `[]` Lending market account.
+    ///   11 `[]` Derived lending market authority.
+    ///   12 `[]` User transfer authority ($authority).
+    ///   13 `[]` Dex market
+    ///   14 `[]` Dex market order book side
+    ///   15 `[]` Temporary memory
+    ///   16 `[]` Clock sysvar
+    ///   17 '[]` Token program id
+    ///   18 `[optional, writable]` Deposit reserve collateral host fee receiver account.
+    MarginBorrowReserveLiquidity {
+        // TODO: slippage constraint
+        /// Amount whose usage depends on `amount_type`
+        collateral_amount: u64,
+        /// amount
+        loan_amount: u64,
+        /// Describe how the amount should be treated
+        amount_type: BorrowAmountType,
+    },
     /// Repay loaned tokens to a reserve and receive collateral tokens. The obligation balance
     /// will be recalculated for interest.
     ///
@@ -375,6 +408,16 @@ impl LendingInstruction {
             }
             Self::AccrueReserveInterest => {
                 buf.push(8);
+            }
+            Self::MarginBorrowReserveLiquidity {
+                collateral_amount,
+                loan_amount,
+                amount_type,
+            } => {
+                buf.push(9);
+                buf.extend_from_slice(&collateral_amount.to_le_bytes());
+                buf.extend_from_slice(&loan_amount.to_le_bytes());
+                buf.extend_from_slice(&amount_type.to_u8().unwrap().to_le_bytes());
             }
         }
         buf
@@ -610,6 +653,69 @@ pub fn borrow_reserve_liquidity(
         accounts,
         data: LendingInstruction::BorrowReserveLiquidity {
             amount,
+            amount_type,
+        }
+        .pack(),
+    }
+}
+
+/// Creates a 'MarginBorrowReserveLiquidity' instruction.
+#[allow(clippy::too_many_arguments)]
+pub fn margin_borrow_reserve_liquidity(
+    program_id: Pubkey,
+    collateral_amount: u64,
+    loan_amount: u64,
+    amount_type: BorrowAmountType,
+    source_collateral_pubkey: Pubkey,
+    destination_liquidity_pubkey: Pubkey,
+    deposit_reserve_pubkey: Pubkey,
+    deposit_reserve_collateral_supply_pubkey: Pubkey,
+    deposit_reserve_collateral_fees_receiver_pubkey: Pubkey,
+    borrow_reserve_pubkey: Pubkey,
+    borrow_reserve_liquidity_supply_pubkey: Pubkey,
+    lending_market_pubkey: Pubkey,
+    lending_market_authority_pubkey: Pubkey,
+    user_transfer_authority_pubkey: Pubkey,
+    obligation_pubkey: Pubkey,
+    obligation_token_mint_pubkey: Pubkey,
+    obligation_token_output_pubkey: Pubkey,
+    dex_market_pubkey: Pubkey,
+    dex_market_order_book_side_pubkey: Pubkey,
+    memory_pubkey: Pubkey,
+    deposit_reserve_collateral_host_pubkey: Option<Pubkey>,
+) -> Instruction {
+    let mut accounts = vec![
+        AccountMeta::new(source_collateral_pubkey, false),
+        AccountMeta::new(destination_liquidity_pubkey, false),
+        AccountMeta::new_readonly(deposit_reserve_pubkey, false),
+        AccountMeta::new(deposit_reserve_collateral_supply_pubkey, false),
+        AccountMeta::new(deposit_reserve_collateral_fees_receiver_pubkey, false),
+        AccountMeta::new(borrow_reserve_pubkey, false),
+        AccountMeta::new(borrow_reserve_liquidity_supply_pubkey, false),
+        AccountMeta::new(obligation_pubkey, false),
+        AccountMeta::new(obligation_token_mint_pubkey, false),
+        AccountMeta::new(obligation_token_output_pubkey, false),
+        AccountMeta::new_readonly(lending_market_pubkey, false),
+        AccountMeta::new_readonly(lending_market_authority_pubkey, false),
+        AccountMeta::new_readonly(user_transfer_authority_pubkey, true),
+        AccountMeta::new_readonly(dex_market_pubkey, false),
+        AccountMeta::new_readonly(dex_market_order_book_side_pubkey, false),
+        AccountMeta::new_readonly(memory_pubkey, false),
+        AccountMeta::new_readonly(sysvar::clock::id(), false),
+        AccountMeta::new_readonly(spl_token::id(), false),
+    ];
+    if let Some(deposit_reserve_collateral_host_pubkey) = deposit_reserve_collateral_host_pubkey {
+        accounts.push(AccountMeta::new(
+            deposit_reserve_collateral_host_pubkey,
+            false,
+        ));
+    }
+    Instruction {
+        program_id,
+        accounts,
+        data: LendingInstruction::MarginBorrowReserveLiquidity {
+            collateral_amount,
+            loan_amount,
             amount_type,
         }
         .pack(),
