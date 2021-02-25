@@ -70,12 +70,10 @@ pub struct InitObligation<'info> {
     lending_program: AccountInfo<'info>,
     deposit_reserve: AccountInfo<'info>,
     borrow_reserve: AccountInfo<'info>,
-    // ? This probably needs to be initialized
+    #[account(mut)]
     obligation: AccountInfo<'info>,
-    // ?
     #[account(mut)]
     obligation_token_mint: AccountInfo<'info>,
-    // ?
     #[account(mut)]
     obligation_token_output: AccountInfo<'info>,
     obligation_token_owner: AccountInfo<'info>,
