@@ -398,26 +398,26 @@ impl LendingInstruction {
                 buf.extend_from_slice(&amount.to_le_bytes());
                 buf.extend_from_slice(&amount_type.to_u8().unwrap().to_le_bytes());
             }
+            Self::RepayReserveLiquidity { liquidity_amount } => {
+                buf.push(6);
+                buf.extend_from_slice(&liquidity_amount.to_le_bytes());
+            }
+            Self::LiquidateObligation { liquidity_amount } => {
+                buf.push(7);
+                buf.extend_from_slice(&liquidity_amount.to_le_bytes());
+            }
+            Self::AccrueReserveInterest => {
+                buf.push(8);
+            }
             Self::MarginBorrowReserveLiquidity {
                 collateral_amount,
                 loan_amount,
                 amount_type,
             } => {
-                buf.push(6);
+                buf.push(9);
                 buf.extend_from_slice(&collateral_amount.to_le_bytes());
                 buf.extend_from_slice(&loan_amount.to_le_bytes());
                 buf.extend_from_slice(&amount_type.to_u8().unwrap().to_le_bytes());
-            }
-            Self::RepayReserveLiquidity { liquidity_amount } => {
-                buf.push(7);
-                buf.extend_from_slice(&liquidity_amount.to_le_bytes());
-            }
-            Self::LiquidateObligation { liquidity_amount } => {
-                buf.push(8);
-                buf.extend_from_slice(&liquidity_amount.to_le_bytes());
-            }
-            Self::AccrueReserveInterest => {
-                buf.push(9);
             }
         }
         buf
