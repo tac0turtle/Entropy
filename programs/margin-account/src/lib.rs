@@ -34,11 +34,32 @@ pub mod margin_account {
     }
     /// Open a leveraged position on serum.
     pub fn open_position_amm(
-        _ctx: Context<OpenPositionAMM>,
+        ctx: Context<OpenPositionAMM>,
         amount_in: u64,
         minimum_amount_out: u64,
     ) -> ProgramResult {
-        invoke(&spl_token_swap::instruction::swap())?;
+        let swap = spl_token_swap::instruction::Swap {
+            amount_in,
+            minimum_amount_out,
+        };
+
+        let instruction = &spl_token_swap::instruction::swap(
+            &ctx.accounts.user_authority.key,
+            &ctx.accounts.token_program.key,
+            &ctx.accounts.swap_info.key,
+            &ctx.accounts.swap_authority.key,
+            &ctx.accounts.user_authority.key,
+            &ctx.accounts.swap_source.key,
+            &ctx.accounts.swap_source.key,
+            &ctx.accounts.swap_dest.key,
+            &ctx.accounts.dest.key,
+            &ctx.accounts.pool_mint.key,
+            &ctx.accounts.pool_fee.key,
+            &ctx.accounts.host_fee.key,
+            swap,
+        )?;
+
+        invoke(instruction, &ctx.accounts.to_account_infos())?;
         Ok(())
     }
     /// Close an open leveraged position.
@@ -101,7 +122,7 @@ pub struct Withdraw<'info> {
 
 #[derive(Accounts)]
 pub struct OpenPositionAMM<'info> {
-    // TODO
+    /// accounts needed to call
     #[account(signer)]
     user_authority: AccountInfo<'info>,
     swap_info: AccountInfo<'info>,
@@ -113,28 +134,24 @@ pub struct OpenPositionAMM<'info> {
     #[account(mut)]
     swap_dest: AccountInfo<'info>,
     #[account(mut)]
+    dest: AccountInfo<'info>,
+    #[account(mut)]
     pool_mint: AccountInfo<'info>,
     #[account(mut)]
     pool_fee: AccountInfo<'info>,
+    #[account(mut)]
+    host_fee: AccountInfo<'info>,
+    /// accounts needed to access funds from token vault
+    #[account(mut)]
+    margin_account: AccountInfo<'info>,
+    #[account(mut)]
+    vault: CpiAccount<'info, TokenAccount>,
+    #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
+    vault_signer: AccountInfo<'info>,
+
+    #[account("token_program.key == &token::ID")]
     token_program: AccountInfo<'info>,
 }
-
-///   3. `[writable]` token_(A|B) SOURCE Account, amount is transferable by user transfer authority,
-///   4. `[writable]` token_(A|B) Base Account to swap INTO.  Must be the SOURCE token.
-///   5. `[writable]` token_(A|B) Base Account to swap FROM.  Must be the DESTINATION token.
-///   6. `[writable]` token_(A|B) DESTINATION Account assigned to USER as the owner.
-///   7. `[writable]` Pool token mint, to generate trading fees
-///   8. `[writable]` Fee account, to receive trading fees
-///   9. '[]` Token program id
-///   10 `[optional, writable]` Host fee account to receive additional trading fees
-
-//         let source_info = next_account_info(account_info_iter)?;
-//         let swap_source_info = next_account_info(account_info_iter)?;
-//         let swap_destination_info = next_account_info(account_info_iter)?;
-//         let destination_info = next_account_info(account_info_iter)?;
-//         let pool_mint_info = next_account_info(account_info_iter)?;
-//         let pool_fee_account_info = next_account_info(account_info_iter)?;
-//         let token_program_info = next_account_info(account_info_iter)?;
 
 #[derive(Accounts)]
 pub struct ClosePosition<'info> {
@@ -156,9 +173,12 @@ pub struct Liquidate<'info> {
 pub struct MarginAccount {
     /// The owner of this margin account.
     pub trader: Pubkey,
-
     /// Open positions held by the margin account.
     pub positions: Vec<Position>,
+    /// Address of token vault
+    pub vault: Pubkey,
+    /// nonce for program derived address
+    pub nonce: u8,
 }
 
 /// Open margin trade position.
