@@ -2,7 +2,7 @@
 
 Margin traders first open a specific margin account that they can deposit an underlying currency to be used as collateral. For the moment we will consider just a single currency (isolated) but it is perfectly feasible to combine a bundle of currencies as collateral. Eventually, when the trader opens a position, buying more of the same currency on margin, they can choose a collateral ratio with which to leverage their position. A 3x long position on SOL-USDC for example means 1x SOL will be used as collateral to back the loan, and the loan (2x SOL worth of USDC) will be swapped for SOL. Lending pools, which fund the debt, are characterized by a maximum collateral ratio (more is addressed in [governance](./governance.md)) and an interest rate (further addressed in [lending pools](./lending.md)).
 
-![margin lifecyce](./assets/lifecycle.png)
+![margin lifecycle](./assets/lifecycle.png)
 
 Here is an example of the typical use case of a margin account, where each box illustrates and action which is described in detail further down this page. The dotted lines symbolise that a trader can potentially hold and manage multiple positions simultaneously and from within the same margin account. Closing of any of these positions can be done voluntarily by the trader or can be involuntarily called by anyone when certain liquidation requirements are met (see [liquidation](./liquidation.md)). 
 
@@ -101,7 +101,7 @@ Opens a leveraged position through the lending pool. This will use the collatera
 
 1) Borrow - borrow funds from a lending reserve and move them to the margin account. This calls [`MarginBorrowReserveLiquidity`](./lending.md). The margin account will in turn create a new position and the funds shall be represented as `loan_denominated_tokens`.
 
-- Can only be called by trader. 
+- Can only be called by the trader. 
 - > TODO: Add collateral constraints
 - `margin_account.position.status = status.Locked`
 
@@ -113,6 +113,8 @@ pub struct Borrow<'info> {
 ```
 
 2. Open Position via AMM - This takes the funds from the margin account (specifically `loan_denominated_tokens`) and performs an AMM trade. Traded tokens are placed directly back into the same address i.e. they remain locked.
+
+- Can only be called by the trader.
 
 ```rust
 #[derive(Accounts)]
@@ -127,6 +129,9 @@ Closes a position which was opened in `OpenPosition`. This will exchange tokens 
 
 1. Close Position via AMM - Calculates the total repayment sum in the loan denomination before trading this with the respective amount of the collateral denomination stored in `locked_tokens`. The funds are sent to the margin account.
 
+- Can only be called by the trader.
+- Repayment sum = loan + interest + buffer. We need to add a buffer here because we don't know when the `RepayLoan` call will be made
+
 ```rust
 #[derive(Accounts)]
 pub struct ClosePositionAMM<'info> {
@@ -136,6 +141,7 @@ pub struct ClosePositionAMM<'info> {
 
 2. Repay Loan Obligation - calls [`RepayReserveLiquidity`](./lending.md) to send repayment funds from the margin account back into the lending reserve. If this is less than the total amount, then the repayment will trigger the liquidation of the obligation account.
 
+- Can only be called by the trader.
 - Upon success, tokens become available `margin_account.position.status = status.Available`
 
 ```rust
@@ -147,6 +153,8 @@ pub struct RepayLoan<'info> {
 
 3. Settle Funds - Once the loan has been payed, any remaining tokens within the obligation account can be transfered back to the margin account (specifically `collateral_denominated_tokens`).
 
+- Can only be called by the trader.
+
 ```rust
 #[derive(Accounts)]
 pub struct SettleFunds<'info> {
@@ -156,6 +164,8 @@ pub struct SettleFunds<'info> {
 ```
 
 4. Withdraw - takes the accumulated funds from `collateral_denominated_tokens` and transfers it to a private account of the users choosing.
+
+- Can only be called by the trader.
 
 ```rust
 #[derive(Accounts)]
@@ -179,14 +189,21 @@ Liquidate is only performed when an account has hit their liquidation limit. Thi
 
 1. Liquidate Position - wraps around `ClosePositionAMM`
 
+- Can be called by anyone.
+- Check's [liquidation limit](./liquidation.md) has been reached
+- Successful liquidation transfers a small reward to a specified beneficiary. This is used to incentivise bots to liquidate unhealthy positions in a timely manner
+
 ```rust
 #[derive(Accounts)]
 pub struct LiquidatePosition<'info> {
-
+    pub beneficiary: AccountInfo<'info>
 }
 ```
 
 2. Force Repay Loan - wraps around `RepayLoan`.
+
+- Can be called by anyone.
+- Successful liquidation transfers a small reward to a specified beneficiary. This is used to incentivise bots to liquidate unhealthy positions in a timely manner.
 
 
 ```rust
