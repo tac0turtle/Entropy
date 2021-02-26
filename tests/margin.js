@@ -11,7 +11,7 @@ describe("margin-account", () => {
 
   const program = anchor.workspace.MarginAccount;
   const lendingProgram = new anchor.web3.PublicKey(
-    "FtMNMKp9DZHKWUyVAsj3Q5QV8ow4P3fUPP7ZrWEQJzKr"
+    "TokenLending1111111111111111111111111111111"
   );
 
   let mint = null;
@@ -63,49 +63,84 @@ describe("margin-account", () => {
   });
 
   it("Initializes obligation account", async () => {
-    let instructions = []
-    let signers = []
+    // Create transaction to create all accounts (need to avoid tx limit)
+    let tx = new anchor.web3.Transaction();
+    let create_signers = []
 
-    // Arbitrary size because I don't have access to the actual layout yet
-    const obligation_size = 500;
-    let obligation = new anchor.web3.Account();
-    signers.push(obligation);
-    instructions.push(anchor.web3.SystemProgram.createAccount({
-      fromPubkey: provider.wallet.publicKey,
-      newAccountPubkey: obligation.publicKey,
-      space: obligation_size,
-      lamports: await provider.connection.getMinimumBalanceForRentExemption(
-        obligation_size
-      ),
-      programId: program.programId,
-    }));
+    const obligation = new anchor.web3.Account();
+    create_signers.push(obligation);
+    tx.add(await createSolAccountInstruction(obligation, provider, program, 500));
 
-    // let depositReserve = obligation.publicKey;
-    // let borrowReserve = obligation.publicKey;
-    // let obligationTokenMint = obligation.publicKey;
-    // let obligationTokenOutput = obligation.publicKey;
-    // let obligationTokenOwner = obligation.publicKey;
-    // let lendingMarket = obligation.publicKey;
-    // let lendingMarketAuthority = obligation.publicKey;
+    const depositReserve = new anchor.web3.Account();
+    create_signers.push(depositReserve);
+    tx.add(await createSolAccountInstruction(depositReserve, provider, program, 500));
 
-    // await program.rpc.initObligation({
-    //   accounts: {
-    //     lendingProgram,
-    //     depositReserve,
-    //     borrowReserve,
-    //     obligation: obligation.publicKey,
-    //     obligationTokenMint,
-    //     obligationTokenOutput,
-    //     obligationTokenOwner,
-    //     lendingMarket,
-    //     lendingMarketAuthority,
+    const borrowReserve = new anchor.web3.Account();
+    create_signers.push(borrowReserve);
+    tx.add(await createSolAccountInstruction(borrowReserve, provider, program, 500));
 
-    //     clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-    //     rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-    //     tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-    //   },
-    //   signers,
-    //   instructions,
-    // });
+    const obligationTokenMint = new anchor.web3.Account();
+    create_signers.push(obligationTokenMint);
+    tx.add(await createSolAccountInstruction(obligationTokenMint, provider, program, 500));
+
+    // Split the txs into two, because over cap
+    await provider.send(tx, create_signers);
+    tx = new anchor.web3.Transaction();
+    create_signers = []
+
+    const obligationTokenOutput = new anchor.web3.Account();
+    create_signers.push(obligationTokenOutput);
+    tx.add(await createSolAccountInstruction(obligationTokenOutput, provider, program, 500));
+
+    const obligationTokenOwner = new anchor.web3.Account();
+    create_signers.push(obligationTokenOwner);
+    tx.add(await createSolAccountInstruction(obligationTokenOwner, provider, program, 500));
+
+    const lendingMarket = new anchor.web3.Account();
+    create_signers.push(lendingMarket);
+    tx.add(await createSolAccountInstruction(lendingMarket, provider, program, 500));
+
+
+    // Execute the transaction against the cluster.
+    await provider.send(tx, create_signers);
+
+    let [
+      _lendingMarketAuthority,
+      _nonce,
+    ] = await anchor.web3.PublicKey.findProgramAddress(
+      [lendingMarket.publicKey.toBuffer()],
+      lendingProgram.programId
+    );
+    const lendingMarketAuthority = _lendingMarketAuthority;
+
+    await program.rpc.initObligation({
+      accounts: {
+        lendingProgram,
+        depositReserve: depositReserve.publicKey,
+        borrowReserve: borrowReserve.publicKey,
+        obligation: obligation.publicKey,
+        obligationTokenMint: obligationTokenMint.publicKey,
+        obligationTokenOutput: obligationTokenOutput.publicKey,
+        obligationTokenOwner: obligationTokenOwner.publicKey,
+        lendingMarket: lendingMarket.publicKey,
+        lendingMarketAuthority: lendingMarketAuthority.publicKey,
+
+        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+      },
+    });
   });
 });
+
+async function createSolAccountInstruction(account, provider, program, size) {
+  return anchor.web3.SystemProgram.createAccount({
+    fromPubkey: provider.wallet.publicKey,
+    newAccountPubkey: account.publicKey,
+    space: size,
+    lamports: await provider.connection.getMinimumBalanceForRentExemption(
+      size
+    ),
+    programId: program.programId,
+  });
+}
