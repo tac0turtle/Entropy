@@ -1,6 +1,6 @@
 const anchor = require("@project-serum/anchor");
 const serumCmn = require("@project-serum/common");
-// const TokenInstructions = require("@project-serum/serum").TokenInstructions;
+const TokenInstructions = require("@project-serum/serum").TokenInstructions;
 const assert = require("assert");
 
 describe("margin-account", () => {
@@ -63,46 +63,49 @@ describe("margin-account", () => {
   });
 
   it("Initializes obligation account", async () => {
-    // let instructions = []
-    // let signers = []
+    let instructions = []
+    let signers = []
 
-    // // Arbitrary size because I don't have access to the actual layout yet
-    // const obligation_size = 500;
-    // let obligation = new anchor.web3.Account();
-    // signers.push(obligation);
-    // instructions.push(anchor.web3.SystemProgram.createAccount({
-    //   fromPubkey: provider.wallet.publicKey,
-    //   newAccountPubkey: obligation.publicKey,
-    //   space: obligation_size,
-    //   lamports: await provider.connection.getMinimumBalanceForRentExemption(
-    //     obligation_size
-    //   ),
-    //   programId: program.programId,
-    // }));
+    // Arbitrary size because I don't have access to the actual layout yet
+    const obligation_size = 500;
+    let obligation = new anchor.web3.Account();
+    signers.push(obligation);
+    instructions.push(anchor.web3.SystemProgram.createAccount({
+      fromPubkey: provider.wallet.publicKey,
+      newAccountPubkey: obligation.publicKey,
+      space: obligation_size,
+      lamports: await provider.connection.getMinimumBalanceForRentExemption(
+        obligation_size
+      ),
+      programId: program.programId,
+    }));
 
-    // let deposit_reserve = provider.wallet.publicKey;
-    // let borrow_reserve = provider.wallet.publicKey;
-    // let obligation = provider.wallet.publicKey;
-    // let obligation_token_mint = provider.wallet.publicKey;
-    // let obligation_token_output = provider.wallet.publicKey;
-    // let obligation_token_owner = provider.wallet.publicKey;
-    // let lending_market = provider.wallet.publicKey;
-    // let lending_market_authority = provider.wallet.publicKey;
+    let depositReserve = obligation.publicKey;
+    let borrowReserve = obligation.publicKey;
+    let obligationTokenMint = obligation.publicKey;
+    let obligationTokenOutput = obligation.publicKey;
+    let obligationTokenOwner = obligation.publicKey;
+    let lendingMarket = obligation.publicKey;
+    let lendingMarketAuthority = obligation.publicKey;
 
-    // await registry.rpc.initObligation({
-    //   accounts: {
-    //     lending_program: lendingProgram,
-    //     deposit_reserve,
-    //     borrow_reserve,
-    //     obligation,
-    //     obligation_token_mint,
-    //     obligation_token_output,
-    //     obligation_token_owner,
-    //     lending_market,
-    //     lending_market_authority,
-    //   },
-    //   signers,
-    //   instructions,
-    // });
+    await program.rpc.initObligation({
+      accounts: {
+        lendingProgram,
+        depositReserve,
+        borrowReserve,
+        obligation: obligation.publicKey,
+        obligationTokenMint,
+        obligationTokenOutput,
+        obligationTokenOwner,
+        lendingMarket,
+        lendingMarketAuthority,
+
+        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+      },
+      signers,
+      instructions,
+    });
   });
 });
