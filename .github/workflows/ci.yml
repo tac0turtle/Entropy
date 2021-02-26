@@ -44,7 +44,7 @@ jobs:
           export NODE_PATH="/usr/local/lib/node_modules/:$NODE_PATH"
           yes | solana-keygen new
           cargo install --git https://github.com/project-serum/anchor anchor-cli --locked
-          anchor test
+          make test-margin
 
   fmt:
     name: rustfmt

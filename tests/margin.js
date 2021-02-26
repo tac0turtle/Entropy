@@ -80,32 +80,32 @@ describe("margin-account", () => {
       programId: program.programId,
     }));
 
-    let depositReserve = obligation.publicKey;
-    let borrowReserve = obligation.publicKey;
-    let obligationTokenMint = obligation.publicKey;
-    let obligationTokenOutput = obligation.publicKey;
-    let obligationTokenOwner = obligation.publicKey;
-    let lendingMarket = obligation.publicKey;
-    let lendingMarketAuthority = obligation.publicKey;
+    // let depositReserve = obligation.publicKey;
+    // let borrowReserve = obligation.publicKey;
+    // let obligationTokenMint = obligation.publicKey;
+    // let obligationTokenOutput = obligation.publicKey;
+    // let obligationTokenOwner = obligation.publicKey;
+    // let lendingMarket = obligation.publicKey;
+    // let lendingMarketAuthority = obligation.publicKey;
 
-    await program.rpc.initObligation({
-      accounts: {
-        lendingProgram,
-        depositReserve,
-        borrowReserve,
-        obligation: obligation.publicKey,
-        obligationTokenMint,
-        obligationTokenOutput,
-        obligationTokenOwner,
-        lendingMarket,
-        lendingMarketAuthority,
+    // await program.rpc.initObligation({
+    //   accounts: {
+    //     lendingProgram,
+    //     depositReserve,
+    //     borrowReserve,
+    //     obligation: obligation.publicKey,
+    //     obligationTokenMint,
+    //     obligationTokenOutput,
+    //     obligationTokenOwner,
+    //     lendingMarket,
+    //     lendingMarketAuthority,
 
-        clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
-      },
-      signers,
-      instructions,
-    });
+    //     clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
+    //     rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+    //     tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
+    //   },
+    //   signers,
+    //   instructions,
+    // });
   });
 });
