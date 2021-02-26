@@ -1,38 +1,10 @@
 # Margin Accounts
 
-Margin traders first open a specific margin account that they can deposit an underlying currency to be used as collateral. For the moment we will consider just a single currency (isolated) but it is perfectly feasible to combine a bundle of currencies as collateral. Eventually, when the trader opens a position, buying a different currency on margin, they can choose a collateral ratio with which to leverage the position. A 3x long position on SOL-USDC for example means 1x SOL will be used as collateral to back the loan, and the loan (2x SOL worth of USDC) will be swapped for SOL. Lending pools, which fund the debt, are characterized by a maximum collateral ratio (more is addressed in [governance](./governance.md)) and an interest rate (further addressed in [lending pools](./lending.md)). 
+Margin traders first open a specific margin account that they can deposit an underlying currency to be used as collateral. For the moment we will consider just a single currency (isolated) but it is perfectly feasible to combine a bundle of currencies as collateral. Eventually, when the trader opens a position, buying more of the same currency on margin, they can choose a collateral ratio with which to leverage their position. A 3x long position on SOL-USDC for example means 1x SOL will be used as collateral to back the loan, and the loan (2x SOL worth of USDC) will be swapped for SOL. Lending pools, which fund the debt, are characterized by a maximum collateral ratio (more is addressed in [governance](./governance.md)) and an interest rate (further addressed in [lending pools](./lending.md)).
 
-Let's roughly define some of these concepts.
+![margin lifecyce](./assets/lifecycle.png)
 
-```rust
-pub struct MarginAccount {
-    pub owner: Pubkey
-    pub positions Vec<Position>
-}
-
-// This represents a single trade. The bought and sold is just a fractional representation of the price
-pub struct Token {
-    pub denomination: Denom
-    pub value: u64
-}
-
-pub struct Loan {
-    pub value: u64
-    pub interest: u64 // this could be with respect to blocks or time
-    pub height: u64 // the height that the loan was made (this is used to calculate the accrual of interest)
-}
-
-pub struct Position {
-    pub trade: MarketTrade
-    pub collateral: u64
-    pub debt: Vec<Loans>
-    pub base_denmination: Denom
-    pub tokens: Vec<Token> // Note that the user could buy several tokens on margin
-}
-```
-
-As we can see, a position represents a static snapshot of the time of the transaction. Naturally, this changes over the course of time as the value of the tokens in other denominations
-changes with respect to the base denomination. Monitoring of the positions of each of the margin accounts in order to avoid a state where the collateral doesn't cover the loss is thus the responsibility of liquidity bots (see [liquidation](./liquidation.md)). 
+Here is an example of the typical use case of a margin account, where each box illustrates and action which is described in detail further down this page. The dotted lines symbolise that a trader can potentially hold and manage multiple positions simultaneously and from within the same margin account. Closing of any of these positions can be done voluntarily by the trader or can be involuntarily called by anyone when certain liquidation requirements are met (see [liquidation](./liquidation.md)). 
 
 A trader can have a set of simultaneous positions at once; each position corresponding to a different underlying denomination. The trader has the option to close any of the open positions at any time. To do this, tokens are exchanged to cover the original loan plus interest and puts this back in the lending pool to repay. The remaining funds are then withdrawn into a trader's account.
 
@@ -63,69 +35,127 @@ pub struct MarginAccount {
 }
 ```
 
-## Messages
+```rust
+// Position holds a store of two token denominations (or mints). One for the deonomination that the loan is in
+// and the other for the denomination that the trade or collateral is in.
+pub struct Position {
+    // This account holds tokens from the loan before they are used in the trade and conversely to hold
+    // tokens after closing the position and before repaying the loan. 
+    pub loan_denominated_tokens: TokenAccount<'info>,
 
-The margin contract defines 6 messages, five of which can only be accessed by the trader.
+    // Tokens are stored here when a position is opened (status becomes locked). When the loan is repayed,
+    // status is updated to available and the trader is able to withdraw the tokens.
+    pub collateral_denominated_tokens: TokenAccount<'info>,
 
-### Initialize
+    // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
+    // status is updated to available indicating that the trader can now withdraw the tokens.
+    pub status: Status
+}
 
-Initialize creates a margin account on behalf of the caller.
+pub enum Status {
+    Locked = 0,
+    Available =  1,
+}
+```
+
+## Actions
+
+The margin contract is comprised of 6 possible actions, each of which can be broken down into a set of transactions. Initially we will look at this from the perspective of using an AMM with which to perform trades.
+See [using an orderbook](##-Using-An-Orderbook) for how the same process could be applied with an order book.
+
+### Create Account
+
+Create Account has a single transaction, `InitializeAccount` which creates a margin account on behalf of the caller.
 
 ```rust
 #[derive(Accounts)]
-pub struct Initialize<'info> {
+pub struct InitializeAccount<'info> {
     #[account(init)]
     margin_account: ProgramAccount<'info, MarginAccount>,
     rent: Sysvar<'info, Rent>,
 }
 ```
 
-### InitObligation
+### Deposit
 
-Deposits funds into an obligation account to be used to open a leveraged trade.
+Deposits funds into an obligation account to be used to open a leveraged trade. This calls [`InitObligation`](./lending.md).
 
 - Can only be called by the trader.
+- Deposits of the same denomination will continue to create new obligation accounts as it's not possible to add more funds into an existing account
+- Clients will need to liquidate the obligation account and create a new one if they wish to add or remove to the amount of collateral. 
+- Clients must keep track of obligation accounts
 
 ```rust
 #[derive(Accounts)]
-pub struct InitObligation<'info> {
+pub struct Deposit<'info> {
     // TODO
+    #[account(signer)]
+    authority: AccountInfo<'info>,
+    vault: TokenAccount<'info>,
 }
 ```
 
 ### OpenPosition
 
-Opens a leveraged position through the lending pool. This will use the collateral to allow a non-backed loan of the complementary token of the pair. These tokens will be exchanged through the Serum dex to the token denomination of the leveraged position.
+Opens a leveraged position through the lending pool. This will use the collateral to allow a non-backed loan of the complementary token of the pair. These tokens will be exchanged through the Serum DEX or AMM to the token denomination of the leveraged position. The action consists of a borrow transaction followed by either an order through an Orderbook or an AMM.
 
-- Can only be called by the trader
+1) Borrow - borrow funds from a lending reserve and move them to the margin account. This calls [`MarginBorrowReserveLiquidity`](./lending.md). The margin account will in turn create a new position and the funds shall be represented as `loan_denominated_tokens`.
+
+- Can only be called by trader. 
+- > TODO: Add collateral constraints
+- `margin_account.position.status = status.Locked`
 
 ```rust
 #[derive(Accounts)]
-pub struct OpenPosition<'info> {
+pub struct Borrow<'info> {
+    // TODO
+}
+```
+
+2. Open Position via AMM - This takes the funds from the margin account (specifically `loan_denominated_tokens`) and performs an AMM trade. Traded tokens are placed directly back into the same address i.e. they remain locked.
+
+```rust
+#[derive(Accounts)]
+pub struct OpenPositionAMM<'info> {
     // TODO
 }
 ```
 
 ### ClosePosition
 
-Closes a position which was opened in `OpenPosition`. This will exchange tokens to cover the original loan and withdraw the remaining tokens into the trader's account passed in.
+Closes a position which was opened in `OpenPosition`. This will exchange tokens to cover the original loan plus accrued interest and move the remaining tokens into the margin account. This is perhaps the most complicated action.
 
-- Can only be called by the trader
+1. Close Position via AMM - Calculates the total repayment sum in the loan denomination before trading this with the respective amount of the collateral denomination stored in `locked_tokens`. The funds are sent to the margin account.
 
 ```rust
 #[derive(Accounts)]
-pub struct ClosePosition<'info> {
+pub struct ClosePositionAMM<'info> {
     // TODO
 }
 ```
 
-### Withdraw
+2. Repay Loan Obligation - calls [`RepayReserveLiquidity`](./lending.md) to send repayment funds from the margin account back into the lending reserve. If this is less than the total amount, then the repayment will trigger the liquidation of the obligation account.
 
-Withdraw withdraws the funds from a liquidated position into an account owned by the trader. This is separate from the liquidate function because that can be called from any user, and the trader will need a function to be able to withdraw remaining funds from a liquidation event.
+- Upon success, tokens become available `margin_account.position.status = status.Available`
 
-TODO: Determine if this can be combined with close, as it should be functionally similar
+```rust
+#[derive(Accounts)]
+pub struct RepayLoan<'info> {
+    // TODO
+}
+```
 
-- Withdraw can only be called by the trader. 
+3. Settle Funds - Once the loan has been payed, any remaining tokens within the obligation account can be transfered back to the margin account (specifically `collateral_denominated_tokens`).
+
+```rust
+#[derive(Accounts)]
+pub struct SettleFunds<'info> {
+    // TODO
+    pub obligation_account: PubKey,
+}
+```
+
+4. Withdraw - takes the accumulated funds from `collateral_denominated_tokens` and transfers it to a private account of the users choosing.
 
 ```rust
 #[derive(Accounts)]
@@ -143,19 +173,30 @@ pub struct Withdraw<'info> {
 }
 ```
 
-
 ### Liquidate
 
-Liquidate is only performed when an account has hit their liquidation limit. This message tries to close the current position as fast as possible. It may need to place multiple trades based on liquidity of markets
+Liquidate is only performed when an account has hit their liquidation limit. This replicates much of the functionality as closing a position would but rather than only being executed by the trader, these calls can be executed by anyone.
 
-- Liquidate can be called from any actor for a reward.
+1. Liquidate Position - wraps around `ClosePositionAMM`
 
 ```rust
 #[derive(Accounts)]
-pub struct Liquidate<'info> {
+pub struct LiquidatePosition<'info> {
 
 }
 ```
+
+2. Force Repay Loan - wraps around `RepayLoan`.
+
+
+```rust
+#[derive(Accounts)]
+pub struct ForceRepayLoan<'info> {
+
+}
+```
+
+The other steps, `SettleFunds` and `Withdraw` aren't critical to ensuring that loans are successfully repaid and thus is still left to the responsibility of the trader to execute when they want. 
 
 ## Cross program interactions
 
@@ -167,3 +208,38 @@ The margin account contract makes a few cross program calls. To start the margin
 2. When the margin account has taken the loan or needs to repay, it will exchange tokens through the serum dex to swap the token from one denomination of the pair to the other.
 
 3. When a position is closed, the funds need to be put back in the lending pool and do any necessary logic to close the obligation account.
+
+
+## Using an Orderbook
+
+This is outside the scope of the current implementation and has therefore been left more as an appendix. It is however possible to wrap the same functionality of marign trading but using an orderbook to perform trades instead.
+
+> NOTE: This is an incomplete list of transactions. 
+
+Open Position via Orderbook - This takes the funds from the margin account and opens an order by calling [`NewOrder`](https://github.com/project-serum/serum-dex/blob/1a9aee6e745e77155b7974e1df06c1ebc97bfae0/dex/src/instruction.rs#L194). Funds are kept in the settle account, and the margin account keeps a reference of this account for closing the position.
+
+```rust
+#[derive(Accounts)]
+pub struct OpenPositionOrderbook<'info> {
+    // TODO
+
+}
+```
+
+Close Position via Orderbook - Calculates the total repayment sum in the loan denomination and places a sell order of type `Immediate or Cancel` of the same value. If the total repayment sum is greater than the value then the entire amount in the settle account will be used.
+
+```rust
+#[derive(Accounts)]
+pub struct ClosePositionOrderBook<'info> {
+    // TODO
+}
+```
+
+Settle Repayment Fund - If the sell order is successful, the client then needs to move the funds from the settle account to the margin account.
+
+```rust
+#[derive(Accounts)]
+pub struct SettleRepaymentFunds<'info> {
+    // TODO
+}
+```

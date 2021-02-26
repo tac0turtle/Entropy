@@ -8,10 +8,9 @@ A Margin Trading Protocol on Solana.
 
 ## Contents
 
-- [Margin Trading: An Overview](./spec/introduction.md)
+- [An Introduction to Margin Trading](./spec/introduction.md)
 - [Margin Accounts](./spec/margin.md)
 - [Lending Pool](./spec/lending.md)
-- [Serum DEX](./spec/dex.md)
 - [Insurance](./spec/insurnace.md)
 - [liquidation](./spec/liquidation.md)
 - [Staking](./spec/staking/md)

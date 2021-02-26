@@ -35,7 +35,7 @@ borrowers prefer a fixed interest rate. If a reserve were to keep track of the i
 
 ## Implementation
 
-The lending contract that will be used is https://github.com/solana-labs/solana-program-library/tree/master/token-lending. We will be adding an additional state transition. A non-backed loan, this loan will be given to only a partial controlled account. Read more on this account [here](./margin.md)
+The lending contract that will be used is https://github.com/solana-labs/solana-program-library/tree/master/token-lending. We will be adding an additional state transition or instruction: A non-backed loan, this loan will be given to an account under the control of the margin contract. Read more on this account [here](./margin.md)
 
 Interest rate will be calculated from a simple linear model:
 
