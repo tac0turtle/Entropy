@@ -71,6 +71,7 @@ describe("margin-account", () => {
     create_signers.push(obligation);
     tx.add(await createSolAccountInstruction(obligation, provider, program, 500));
 
+    // TODO initialize these following accounts correctly
     const depositReserve = new anchor.web3.Account();
     create_signers.push(depositReserve);
     tx.add(await createSolAccountInstruction(depositReserve, provider, program, 500));
