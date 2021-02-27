@@ -36,6 +36,7 @@ jobs:
           sudo npm install -g @project-serum/serum
           sudo npm install -g @project-serum/common
           sudo npm install -g @solana/spl-token
+          sudo npm install -g buffer-layout
 
           sudo apt-get install -y pkg-config build-essential libudev-dev
           sh -c "$(curl -sSfL https://release.solana.com/v1.5.5/install)"

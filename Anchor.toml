@@ -2,5 +2,5 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [[test.genesis]]
-address = "TokenLending1111111111111111111111111111111"
+address = "TokenLending2222222222222222222222222222222"
 program = "./target/deploy/spl_token_lending.so"
