@@ -14,24 +14,26 @@ describe("margin-account", () => {
     "TokenLending1111111111111111111111111111111"
   );
 
-  let mint = null;
-  let baseVault = null;
-  let receiver = null;
+  let obligationMint = null;
+  let obligationVault = null;
+  let collateralMint = null;
+  let collateralVault = null;
 
   it("Sets up initial test state", async () => {
     // Setup vault accounts for interactions
-    const [_mint, _baseVault] = await serumCmn.createMintAndVault(
+    const [_oblMint, _oblVault] = await serumCmn.createMintAndVault(
+      program.provider,
+      new anchor.BN(2000000)
+    );
+    obligationMint = _oblMint;
+    obligationVault = _oblVault;
+
+    const [_colMint, _colVault] = await serumCmn.createMintAndVault(
       program.provider,
       new anchor.BN(1000000)
     );
-    mint = _mint;
-    baseVault = _baseVault;
-
-    receiver = await serumCmn.createTokenAccount(
-      program.provider,
-      mint,
-      program.provider.wallet.publicKey
-    );
+    collateralMint = _colMint;
+    collateralVault = _colVault;
 
     // Assert that the embedded program is executable
     let accInfo = await anchor.getProvider().connection.getAccountInfo(lendingProgram);
@@ -69,37 +71,34 @@ describe("margin-account", () => {
 
     const obligation = new anchor.web3.Account();
     create_signers.push(obligation);
-    tx.add(await createSolAccountInstruction(obligation, provider, program, 500));
+    tx.add(await createSolAccountInstruction(obligation, provider, program, 500, provider.wallet.publicKey));
 
     // TODO initialize these following accounts correctly
     const depositReserve = new anchor.web3.Account();
     create_signers.push(depositReserve);
-    tx.add(await createSolAccountInstruction(depositReserve, provider, program, 500));
+    tx.add(await createSolAccountInstruction(depositReserve, provider, program, 500, provider.wallet.publicKey));
 
+    // TODO
     const borrowReserve = new anchor.web3.Account();
     create_signers.push(borrowReserve);
-    tx.add(await createSolAccountInstruction(borrowReserve, provider, program, 500));
-
-    const obligationTokenMint = new anchor.web3.Account();
-    create_signers.push(obligationTokenMint);
-    tx.add(await createSolAccountInstruction(obligationTokenMint, provider, program, 500));
+    tx.add(await createSolAccountInstruction(borrowReserve, provider, program, 500, provider.wallet.publicKey));
 
     // Split the txs into two, because over cap
     await provider.send(tx, create_signers);
     tx = new anchor.web3.Transaction();
     create_signers = []
 
+    // Lending obligation output account
     const obligationTokenOutput = new anchor.web3.Account();
     create_signers.push(obligationTokenOutput);
-    tx.add(await createSolAccountInstruction(obligationTokenOutput, provider, program, 500));
+    tx.add(await createSolAccountInstruction(obligationTokenOutput, provider, program, 500, provider.wallet.publicKey));
 
-    const obligationTokenOwner = new anchor.web3.Account();
-    create_signers.push(obligationTokenOwner);
-    tx.add(await createSolAccountInstruction(obligationTokenOwner, provider, program, 500));
+    const obligationTokenOwner = provider.wallet.publicKey;
 
+    // TODO should be setup with deposit reserve
     const lendingMarket = new anchor.web3.Account();
     create_signers.push(lendingMarket);
-    tx.add(await createSolAccountInstruction(lendingMarket, provider, program, 500));
+    tx.add(await createSolAccountInstruction(lendingMarket, provider, program, 500, provider.wallet.publicKey));
 
 
     // Execute the transaction against the cluster.
@@ -107,7 +106,6 @@ describe("margin-account", () => {
 
     let [
       _lendingMarketAuthority,
-      _nonce,
     ] = await anchor.web3.PublicKey.findProgramAddress(
       [lendingMarket.publicKey.toBuffer()],
       lendingProgram
@@ -120,7 +118,7 @@ describe("margin-account", () => {
         depositReserve: depositReserve.publicKey,
         borrowReserve: borrowReserve.publicKey,
         obligation: obligation.publicKey,
-        obligationTokenMint: obligationTokenMint.publicKey,
+        obligationTokenMint: obligationMint,
         obligationTokenOutput: obligationTokenOutput.publicKey,
         obligationTokenOwner: obligationTokenOwner.publicKey,
         lendingMarket: lendingMarket.publicKey,
@@ -134,9 +132,9 @@ describe("margin-account", () => {
   });
 });
 
-async function createSolAccountInstruction(account, provider, program, size) {
+async function createSolAccountInstruction(account, provider, program, size, from) {
   return anchor.web3.SystemProgram.createAccount({
-    fromPubkey: provider.wallet.publicKey,
+    fromPubkey: from,
     newAccountPubkey: account.publicKey,
     space: size,
     lamports: await provider.connection.getMinimumBalanceForRentExemption(
