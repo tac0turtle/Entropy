@@ -49,9 +49,6 @@ pub mod margin_account {
             minimum_amount_out,
         };
 
-        ///   5. `[writable]` token_(A|B) Base Account to swap FROM.  Must be the DESTINATION token.
-        ///   6. `[writable]` token_(A|B) DESTINATION Account assigned to USER as the owner.
-        ///   8. `[writable]` Fee account, to receive trading fees
         let instruction = &spl_token_swap::instruction::swap(
             ctx.accounts.swap_program.key,
             ctx.accounts.token_program.key,
@@ -60,7 +57,7 @@ pub mod margin_account {
             ctx.accounts.vault_signer.key,
             ctx.accounts.loaned_vault.to_account_info().key,
             ctx.accounts.swap_source.key,
-            ctx.accounts.swap_dest..key,
+            ctx.accounts.swap_dest.key,
             ctx.accounts.collateral_vault.to_account_info().key,
             ctx.accounts.pool_mint.key,
             ctx.accounts.pool_fee.key,
@@ -78,14 +75,51 @@ pub mod margin_account {
 
         // Mark account as having an open trade
         let margin_account = &mut ctx.accounts.margin_account;
-        margin_account.status = Status::Locked;
         margin_account.collateral_vault = *ctx.accounts.collateral_vault.to_account_info().key;
 
         Ok(())
     }
     /// Close an open leveraged position.
-    pub fn close_position(_ctx: Context<ClosePosition>) -> ProgramResult {
-        // TODO
+    pub fn close_positionAMM(
+        ctx: Context<ClosePositionAMM>,
+        amount_in: u64,
+        minimum_amount_out: u64,
+    ) -> ProgramResult {
+        let swap = spl_token_swap::instruction::Swap {
+            amount_in,
+            minimum_amount_out,
+        };
+
+        let instruction = &spl_token_swap::instruction::swap(
+            ctx.accounts.swap_program.key,
+            ctx.accounts.token_program.key,
+            ctx.accounts.swap_info.key,
+            ctx.accounts.swap_authority.key,
+            ctx.accounts.vault_signer.key,
+            ctx.accounts.collateral_vault.to_account_info().key,
+            ctx.accounts.swap_source.key,
+            ctx.accounts.swap_dest.key,
+            ctx.accounts.loaned_vault.to_account_info().key,
+            ctx.accounts.pool_mint.key,
+            ctx.accounts.pool_fee.key,
+            Some(ctx.accounts.host_fee.key),
+            swap,
+        )?;
+
+        let seeds = &[
+            ctx.accounts.margin_account.to_account_info().key.as_ref(),
+            &[ctx.accounts.margin_account.nonce],
+        ];
+        let signer = &[&seeds[..]];
+
+        invoke_signed(instruction, &ctx.accounts.to_account_infos(), signer)?;
+
+        // Mark account as having an open trade
+        let margin_account = &mut ctx.accounts.margin_account;
+        Ok(())
+    }
+
+    pub fn repay(ctx: Context<Repay>, amount: u64) -> ProgramResult {
         Ok(())
     }
     /// Withdraw funds from an obligation account.
@@ -161,6 +195,7 @@ pub struct Withdraw<'info> {
     token_program: AccountInfo<'info>,
 }
 
+// OpenPositionAMM takes the tokens that are in the margin account and executes a trade with them.
 #[derive(Accounts)]
 pub struct OpenPositionAMM<'info> {
     #[account(signer)]
@@ -194,16 +229,47 @@ pub struct OpenPositionAMM<'info> {
     token_program: AccountInfo<'info>,
 }
 
+// ClosePositionAMM call an amm to close the entire position or only enough to repay the loan, if in profit
 #[derive(Accounts)]
-pub struct ClosePosition<'info> {
-    // TODO
+pub struct ClosePositionAMM<'info> {
     #[account(signer)]
-    authority: AccountInfo<'info>,
+    trader: AccountInfo<'info>,
+    /// accounts needed to call
+    swap_program: AccountInfo<'info>,
+    swap_info: AccountInfo<'info>,
+    swap_authority: AccountInfo<'info>,
+    #[account(mut)]
+    source: AccountInfo<'info>,
+    #[account(mut)]
+    swap_source: AccountInfo<'info>,
+    #[account(mut)]
+    swap_dest: AccountInfo<'info>,
+    #[account(mut)]
+    pool_mint: AccountInfo<'info>,
+    #[account(mut)]
+    pool_fee: AccountInfo<'info>,
+    host_fee: AccountInfo<'info>,
+    /// accounts needed to access funds from token vault
+    #[account(mut, has_one = trader, has_one = loaned_vault)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
+    #[account(mut)]
+    loaned_vault: CpiAccount<'info, TokenAccount>,
+    #[account(mut)]
+    collateral_vault: CpiAccount<'info, TokenAccount>,
+    #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
+    vault_signer: AccountInfo<'info>,
+
+    #[account("token_program.key == &token::ID")]
+    token_program: AccountInfo<'info>,
 }
 
 //? Possibly add cancel position, if it cannot be combined with close.
 
 #[derive(Accounts)]
+pub struct Repay<'info> {
+    // TODO
+    authority: AccountInfo<'info>,
+}
 pub struct Liquidate<'info> {
     // TODO
     authority: AccountInfo<'info>,
