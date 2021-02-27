@@ -2,7 +2,7 @@
 
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, TokenAccount};
-use solana_program::program::invoke;
+use solana_program::program::{invoke, invoke_signed};
 
 #[program]
 pub mod margin_account {
@@ -13,7 +13,6 @@ pub mod margin_account {
     pub fn initialize(ctx: Context<Initialize>, trader: Pubkey, nonce: u8) -> ProgramResult {
         let margin_account = &mut ctx.accounts.margin_account;
         margin_account.trader = trader;
-        margin_account.vault = *ctx.accounts.vault.to_account_info().key;
         margin_account.nonce = nonce;
 
         Ok(())
@@ -51,27 +50,33 @@ pub mod margin_account {
         };
 
         let instruction = &spl_token_swap::instruction::swap(
-            ctx.accounts.user_authority.key,
+            ctx.accounts.lending_program.key,
             ctx.accounts.token_program.key,
             ctx.accounts.swap_info.key,
             ctx.accounts.swap_authority.key,
-            ctx.accounts.user_authority.key,
+            ctx.accounts.vault_signer.key,
             ctx.accounts.swap_source.key,
             ctx.accounts.swap_source.key,
-            ctx.accounts.swap_dest.key,
-            ctx.accounts.dest.key,
+            ctx.accounts.collateral_vault.to_account_info().key,
+            ctx.accounts.loaned_vault.to_account_info().key,
             ctx.accounts.pool_mint.key,
             ctx.accounts.pool_fee.key,
             Some(ctx.accounts.host_fee.key),
             swap,
         )?;
 
-        // let seeds = &[
-        //     ctx.accounts.margin_account.to_account_info().key.as_ref(),
-        //     &[ctx.accounts.margin_account.nonce],
-        // ]; todo: do we need seeds
+        let seeds = &[
+            ctx.accounts.margin_account.to_account_info().key.as_ref(),
+            &[ctx.accounts.margin_account.nonce],
+        ];
+        let signer = &[&seeds[..]];
 
-        invoke(instruction, &ctx.accounts.to_account_infos())?;
+        invoke_signed(instruction, &ctx.accounts.to_account_infos(), signer)?;
+
+        // Mark account as having an open trade
+        let margin_account = &mut ctx.accounts.margin_account;
+        margin_account.status = Status::Locked;
+        margin_account.collateral_vault = *ctx.accounts.collateral_vault.to_account_info().key;
 
         Ok(())
     }
@@ -155,9 +160,10 @@ pub struct Withdraw<'info> {
 
 #[derive(Accounts)]
 pub struct OpenPositionAMM<'info> {
-    /// accounts needed to call
     #[account(signer)]
-    user_authority: AccountInfo<'info>,
+    trader: AccountInfo<'info>,
+    /// accounts needed to call
+    lending_program: AccountInfo<'info>,
     swap_info: AccountInfo<'info>,
     swap_authority: AccountInfo<'info>,
     #[account(mut)]
@@ -165,19 +171,17 @@ pub struct OpenPositionAMM<'info> {
     #[account(mut)]
     swap_source: AccountInfo<'info>,
     #[account(mut)]
-    swap_dest: AccountInfo<'info>,
-    #[account(mut)]
-    dest: AccountInfo<'info>,
-    #[account(mut)]
     pool_mint: AccountInfo<'info>,
     #[account(mut)]
     pool_fee: AccountInfo<'info>,
     host_fee: AccountInfo<'info>,
     /// accounts needed to access funds from token vault
-    #[account(mut)]
+    #[account(mut, has_one = trader, has_one = loaned_vault)]
     margin_account: ProgramAccount<'info, MarginAccount>,
     #[account(mut)]
-    vault: CpiAccount<'info, TokenAccount>,
+    loaned_vault: CpiAccount<'info, TokenAccount>,
+    #[account(mut)]
+    collateral_vault: CpiAccount<'info, TokenAccount>,
     #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
     vault_signer: AccountInfo<'info>,
 
@@ -205,21 +209,41 @@ pub struct Liquidate<'info> {
 pub struct MarginAccount {
     /// The owner of this margin account.
     pub trader: Pubkey,
+    /// Tracks the size of the loan to know if the amount being paid back is the total amount in order to unlock the account
+    pub loan_amount: u64,
     /// Open positions held by the margin account.
-    pub positions: Vec<Position>,
-    /// Address of token vault
-    pub vault: Pubkey,
+    // This account holds tokens from the loan before they are used in the trade and conversely to hold
+    // tokens after closing the position and before repaying the loan.
+    pub loaned_vault: Pubkey,
+    // Tokens are stored here when a position is opened (status becomes locked). When the loan is repaid,
+    // status is updated to available and the trader is able to withdraw the tokens.
+    pub collateral_vault: Pubkey,
+    // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
+    // status is updated to available indicating that the trader can now withdraw the tokens.
+    pub status: Status,
+
     /// nonce for program derived address
     pub nonce: u8,
 }
 
-/// Open margin trade position.
+// /// Open margin trade position.
+// #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+// pub struct Position {
+//     // This account holds tokens from the loan before they are used in the trade and conversely to hold
+//     // tokens after closing the position and before repaying the loan.
+//     pub loaned_tokens_vault: Pubkey,
+//     // Tokens are stored here when a position is opened (status becomes locked). When the loan is repaid,
+//     // status is updated to available and the trader is able to withdraw the tokens.
+//     pub collateral_tokens: Pubkey,
+//     // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
+//     // status is updated to available indicating that the trader can now withdraw the tokens.
+//     pub status: Status,
+// }
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-pub struct Position {
-    /// Program address for obligation account used as collateral.
-    pub obligation_account: Pubkey,
-    /// Indicates whether an obligation account has been used to open a leveraged position.
-    pub open: bool,
+pub enum Status {
+    Locked,
+    Available,
 }
 
 #[error]
