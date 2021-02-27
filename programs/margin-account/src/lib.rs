@@ -29,7 +29,9 @@ pub mod margin_account {
                 *ctx.accounts.obligation_token_output.key,
                 *ctx.accounts.obligation_token_owner.key,
             ),
-            &accounts,
+            // First account here is the lending program account, but indexes for obligation call
+            // need to be indexed correctly
+            &accounts[1..],
         )?;
         Ok(())
     }
