@@ -78,7 +78,8 @@ pub mod margin_account {
 
         // Mark account as having an open trade
         let margin_account = &mut ctx.accounts.margin_account;
-        margin_account.collateral_vault = *ctx.accounts.collateral_vault.to_account_info().key;
+        margin_account.position.collateral_vault =
+            *ctx.accounts.collateral_vault.to_account_info().key;
 
         Ok(())
     }
@@ -157,9 +158,9 @@ pub mod margin_account {
 
         // Mark account as having an open trade
         let margin_account = &mut ctx.accounts.margin_account;
-        margin_account.loan_amount -= amount;
-        if margin_account.loan_amount == 0 {
-            margin_account.status = Status::Available;
+        margin_account.position.loan_amount -= amount;
+        if margin_account.position.loan_amount == 0 {
+            margin_account.position.status = Status::Available;
         }
 
         Ok(())
@@ -258,7 +259,7 @@ pub struct OpenPositionAMM<'info> {
     pool_fee: AccountInfo<'info>,
     host_fee: AccountInfo<'info>,
     /// accounts needed to access funds from token vault
-    #[account(mut, has_one = trader, has_one = loaned_vault)]
+    #[account(mut, has_one = trader)]
     margin_account: ProgramAccount<'info, MarginAccount>,
     #[account(mut)]
     loaned_vault: CpiAccount<'info, TokenAccount>,
@@ -292,7 +293,7 @@ pub struct ClosePositionAMM<'info> {
     pool_fee: AccountInfo<'info>,
     host_fee: AccountInfo<'info>,
     /// accounts needed to access funds from token vault
-    #[account(mut, has_one = trader, has_one = loaned_vault)]
+    #[account(mut)]
     margin_account: ProgramAccount<'info, MarginAccount>,
     #[account(mut)]
     loaned_vault: CpiAccount<'info, TokenAccount>,
@@ -308,7 +309,6 @@ pub struct ClosePositionAMM<'info> {
 #[derive(Accounts)]
 pub struct Repay<'info> {
     lending_program: AccountInfo<'info>,
-
     /// Account which is repaying the loan.
     #[account(mut)]
     source_liquidity_acc: AccountInfo<'info>,
@@ -336,7 +336,7 @@ pub struct Repay<'info> {
     #[account(mut)]
     loan_vault: CpiAccount<'info, TokenAccount>,
 
-    // #[account(mut, has_one = trader, has_one = loaned_vault)]
+    #[account(mut)]
     margin_account: ProgramAccount<'info, MarginAccount>,
     #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
     vault_signer: AccountInfo<'info>,
@@ -355,6 +355,15 @@ pub struct Liquidate<'info> {
 pub struct MarginAccount {
     /// The owner of this margin account.
     pub trader: Pubkey,
+    /// Position is a wrapper around an open position. This position
+    pub position: Position,
+    /// nonce for program derived address
+    pub nonce: u8,
+}
+
+/// Open margin trade position.
+#[account]
+pub struct Position {
     /// Tracks the size of the loan to know if the amount being paid back is the total amount in order to unlock the account
     pub loan_amount: u64,
     /// Open positions held by the margin account.
@@ -367,24 +376,7 @@ pub struct MarginAccount {
     // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
     // status is updated to available indicating that the trader can now withdraw the tokens.
     pub status: Status,
-
-    /// nonce for program derived address
-    pub nonce: u8,
 }
-
-// /// Open margin trade position.
-// #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-// pub struct Position {
-//     // This account holds tokens from the loan before they are used in the trade and conversely to hold
-//     // tokens after closing the position and before repaying the loan.
-//     pub loaned_tokens_vault: Pubkey,
-//     // Tokens are stored here when a position is opened (status becomes locked). When the loan is repaid,
-//     // status is updated to available and the trader is able to withdraw the tokens.
-//     pub collateral_tokens: Pubkey,
-//     // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
-//     // status is updated to available indicating that the trader can now withdraw the tokens.
-//     pub status: Status,
-// }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub enum Status {
