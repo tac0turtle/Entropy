@@ -49,16 +49,19 @@ pub mod margin_account {
             minimum_amount_out,
         };
 
+        ///   5. `[writable]` token_(A|B) Base Account to swap FROM.  Must be the DESTINATION token.
+        ///   6. `[writable]` token_(A|B) DESTINATION Account assigned to USER as the owner.
+        ///   8. `[writable]` Fee account, to receive trading fees
         let instruction = &spl_token_swap::instruction::swap(
-            ctx.accounts.lending_program.key,
+            ctx.accounts.swap_program.key,
             ctx.accounts.token_program.key,
             ctx.accounts.swap_info.key,
             ctx.accounts.swap_authority.key,
             ctx.accounts.vault_signer.key,
             ctx.accounts.loaned_vault.to_account_info().key,
             ctx.accounts.swap_source.key,
+            ctx.accounts.swap_dest..key,
             ctx.accounts.collateral_vault.to_account_info().key,
-            ctx.accounts.loaned_vault.to_account_info().key,
             ctx.accounts.pool_mint.key,
             ctx.accounts.pool_fee.key,
             Some(ctx.accounts.host_fee.key),
@@ -163,13 +166,15 @@ pub struct OpenPositionAMM<'info> {
     #[account(signer)]
     trader: AccountInfo<'info>,
     /// accounts needed to call
-    lending_program: AccountInfo<'info>,
+    swap_program: AccountInfo<'info>,
     swap_info: AccountInfo<'info>,
     swap_authority: AccountInfo<'info>,
     #[account(mut)]
     source: AccountInfo<'info>,
     #[account(mut)]
     swap_source: AccountInfo<'info>,
+    #[account(mut)]
+    swap_dest: AccountInfo<'info>,
     #[account(mut)]
     pool_mint: AccountInfo<'info>,
     #[account(mut)]
