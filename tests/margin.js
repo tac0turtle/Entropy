@@ -37,6 +37,7 @@ describe("margin-account", () => {
   it("Initializes margin account", async () => {
     // Arbitrary size for now, just need it to be large enough
     const marginSize = 600;
+    const nonce = 0;
     await program.rpc.initialize(provider.wallet.publicKey, {
       accounts: {
         marginAccount: marginAcc.publicKey,
@@ -44,7 +45,7 @@ describe("margin-account", () => {
       },
       signers: [marginAcc],
       instructions: [
-        await program.account.marginAccount.createInstruction(marginAcc, marginSize),
+        await program.account.marginAccount.createInstruction(marginAcc, marginSize, nonce),
       ],
     });
 
@@ -52,5 +53,6 @@ describe("margin-account", () => {
     // Assert state after initialization
     const marginAccount = await program.account.marginAccount(marginAcc.publicKey);
     assert.ok(marginAccount.trader.equals(provider.wallet.publicKey));
+    assert.ok(marginAccount.nonce.equals(0));
   });
 });

@@ -55,7 +55,7 @@ pub mod margin_account {
             ctx.accounts.swap_info.key,
             ctx.accounts.swap_authority.key,
             ctx.accounts.vault_signer.key,
-            ctx.accounts.swap_source.key,
+            ctx.accounts.loaned_vault.to_account_info().key,
             ctx.accounts.swap_source.key,
             ctx.accounts.collateral_vault.to_account_info().key,
             ctx.accounts.loaned_vault.to_account_info().key,
