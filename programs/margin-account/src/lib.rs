@@ -117,7 +117,38 @@ pub mod margin_account {
         Ok(())
     }
 
-    pub fn repay(_ctx: Context<Repay>, _amount: u64) -> ProgramResult {
+    pub fn repay(ctx: Context<Repay>, amount: u64) -> ProgramResult {
+        // pub fn repay_reserve_liquidity(
+        // program_id: Pubkey,
+        // liquidity_amount: u64,
+        // source_liquidity_pubkey: Pubkey,
+        // destination_collateral_pubkey: Pubkey,
+        // repay_reserve_pubkey: Pubkey,
+        // repay_reserve_liquidity_supply_pubkey: Pubkey,
+        // withdraw_reserve_pubkey: Pubkey,
+        // withdraw_reserve_collateral_supply_pubkey: Pubkey,
+        // obligation_pubkey: Pubkey,
+        // obligation_mint_pubkey: Pubkey,
+        // obligation_output_pubkey: Pubkey,
+        // lending_market_pubkey: Pubkey,
+        // lending_market_authority_pubkey: Pubkey,
+        // user_transfer_authority_pubkey: Pubkey,
+        let instrcution = spl_token_lending::instruction::repay_reserve_liquidity(
+            ctx.accounts.lending_program,
+            amount,
+            ctx.accounts.source_liquidity_acc,
+            ctx.accounts.destination_coll_account,
+            ctx.accounts.repay_reserve_account,
+            ctx.accounts.repay_reserve_spl_acccount,
+            ctx.accounts.withdraw_reserve,
+            ctx.accounts.withdraw_reserve_collateral,
+            ctx.accounts.obligation,
+            ctx.accounts.obligation_mint,
+            //   obligation_output_pubkey,
+            //    lending_market_pubkey,
+            //     lending_market_authority_pubkey,
+            //      user_transfer_authority_pubkey,
+        );
         Ok(())
     }
     /// Withdraw funds from an obligation account.
@@ -261,12 +292,33 @@ pub struct ClosePositionAMM<'info> {
     token_program: AccountInfo<'info>,
 }
 
-//? Possibly add cancel position, if it cannot be combined with close.
-
 #[derive(Accounts)]
 pub struct Repay<'info> {
-    // TODO
-    authority: AccountInfo<'info>,
+    lending_program: AccountInfo<'info>,
+
+    #[account(mut)]
+    source_liquidity_acc: AccountInfo<'info>,
+    #[account(mut)]
+    destination_coll_account: AccountInfo<'info>,
+    #[account(mut)]
+    repay_reserve_account: AccountInfo<'info>,
+    #[account(mut)]
+    repay_reserve_spl_acccount: AccountInfo<'info>,
+    withdraw_reserve: AccountInfo<'info>,
+    /// User token account to withdraw obligation to
+    #[account(mut)]
+    withdraw_reserve_collateral: AccountInfo<'info>,
+    #[account(mut)]
+    obligation: AccountInfo<'info>,
+    #[account(mut)]
+    obligation_mint: AccountInfo<'info>,
+    #[account(mut)]
+    obligation_input: AccountInfo<'info>,
+    lending_market: AccountInfo<'info>,
+    derived_lending_authority: AccountInfo<'info>,
+    #[account("token_program.key == &token::ID")]
+    token_program: AccountInfo<'info>,
+    clock: Sysvar<'info, Clock>,
 }
 #[derive(Accounts)]
 pub struct Liquidate<'info> {
