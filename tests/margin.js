@@ -110,7 +110,7 @@ describe("margin-account", () => {
       _nonce,
     ] = await anchor.web3.PublicKey.findProgramAddress(
       [lendingMarket.publicKey.toBuffer()],
-      lendingProgram.programId
+      lendingProgram
     );
     const lendingMarketAuthority = _lendingMarketAuthority;
 
@@ -124,7 +124,7 @@ describe("margin-account", () => {
         obligationTokenOutput: obligationTokenOutput.publicKey,
         obligationTokenOwner: obligationTokenOwner.publicKey,
         lendingMarket: lendingMarket.publicKey,
-        lendingMarketAuthority: lendingMarketAuthority.publicKey,
+        lendingMarketAuthority,
 
         clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
