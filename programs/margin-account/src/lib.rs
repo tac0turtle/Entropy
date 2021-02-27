@@ -80,7 +80,7 @@ pub mod margin_account {
         Ok(())
     }
     /// Close an open leveraged position.
-    pub fn close_positionAMM(
+    pub fn close_position_amm(
         ctx: Context<ClosePositionAMM>,
         amount_in: u64,
         minimum_amount_out: u64,
@@ -114,12 +114,10 @@ pub mod margin_account {
 
         invoke_signed(instruction, &ctx.accounts.to_account_infos(), signer)?;
 
-        // Mark account as having an open trade
-        let margin_account = &mut ctx.accounts.margin_account;
         Ok(())
     }
 
-    pub fn repay(ctx: Context<Repay>, amount: u64) -> ProgramResult {
+    pub fn repay(_ctx: Context<Repay>, _amount: u64) -> ProgramResult {
         Ok(())
     }
     /// Withdraw funds from an obligation account.
@@ -270,6 +268,7 @@ pub struct Repay<'info> {
     // TODO
     authority: AccountInfo<'info>,
 }
+#[derive(Accounts)]
 pub struct Liquidate<'info> {
     // TODO
     authority: AccountInfo<'info>,
