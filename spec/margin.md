@@ -57,7 +57,6 @@ Margin has a single account struct as state.
 pub struct MarginAccount {
     /// The owner of this margin account.
     pub trader: Pubkey,
-
     /// Open positions held by the margin account.
     pub positions: Vec<Position>,
 }
@@ -76,7 +75,6 @@ Initialize creates a margin account on behalf of the caller.
 pub struct Initialize<'info> {
     #[account(init)]
     margin_account: ProgramAccount<'info, MarginAccount>,
-    rent: Sysvar<'info, Rent>,
 }
 ```
 
