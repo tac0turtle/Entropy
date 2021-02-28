@@ -81,7 +81,7 @@ pub mod margin_account {
 
         // Mark account as having an open trade
         let margin_account = &mut ctx.accounts.margin_account;
-        if margin_account.position.collateral_vault. ==  { // todo: here
+        if margin_account.position.collateral_vault == Pubkey::default() {
             margin_account.position.collateral_vault =
                 *ctx.accounts.destination_vault.to_account_info().key;
         }
