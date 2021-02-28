@@ -64,14 +64,14 @@ describe("margin-account", () => {
     // Arbitrary size for now, just need it to be large enough
     const marginSize = 600;
     const nonce = 0;
-    await program.rpc.initialize(provider.wallet.publicKey, {
+    await program.rpc.initialize(provider.wallet.publicKey, nonce, {
       accounts: {
         marginAccount: marginAcc.publicKey,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       },
       signers: [marginAcc],
       instructions: [
-        await program.account.marginAccount.createInstruction(marginAcc, marginSize, nonce),
+        await program.account.marginAccount.createInstruction(marginAcc, marginSize),
       ],
     });
 
