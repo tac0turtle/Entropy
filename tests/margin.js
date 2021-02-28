@@ -77,11 +77,6 @@ describe("margin-account", () => {
 
 
     // Assert state after initialization
-<<<<<<< HEAD
-    const marginAccount = await program.account.marginAccount(marginAcc.publicKey);
-    assert.ok(marginAccount.trader.equals(provider.wallet.publicKey));
-    assert.ok(marginAccount.nonce.equals(0));
-=======
     marginProgram = await program.account.marginAccount(marginAcc.publicKey);
     assert.ok(marginProgram.trader.equals(provider.wallet.publicKey));
   });
@@ -170,7 +165,6 @@ describe("margin-account", () => {
         tokenProgram: TokenInstructions.TOKEN_PROGRAM_ID,
       },
     });
->>>>>>> master
   });
 });
 
