@@ -9,7 +9,6 @@ pub mod margin_account {
     use super::*;
 
     /// Initialize new margin account under a specific trader's address.
-    #[access_control(Initialize::accounts(&ctx, nonce))]
     pub fn initialize(ctx: Context<Initialize>, trader: Pubkey, nonce: u8) -> ProgramResult {
         let margin_account = &mut ctx.accounts.margin_account;
         margin_account.trader = trader;
