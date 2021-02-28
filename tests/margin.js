@@ -91,7 +91,8 @@ describe("margin-account", () => {
   it("Initializes margin account", async () => {
     // Arbitrary size for now, just need it to be large enough
     const marginSize = 600;
-    await program.rpc.initialize(provider.wallet.publicKey, {
+    const nonce = 0;
+    await program.rpc.initialize(provider.wallet.publicKey, nonce, {
       accounts: {
         marginAccount: marginAcc.publicKey,
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
