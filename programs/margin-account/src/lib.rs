@@ -166,11 +166,45 @@ pub mod margin_account {
         Ok(())
     }
 
-    pub fn borrorw(
-        _ctx: Context<Borrow>,
-        _loan_amount: uint64,
-        _collateral_amount: uint64,
-    ) -> ProgramResult {
+    pub fn borrow(ctx: Context<Borrow>, loan_amount: u64, collateral_amount: u64) -> ProgramResult {
+        if loan_amount == 0 || collateral_amount == 0 {
+            return Err(ErrorCode::InvalidAmount.into());
+        };
+
+        let accounts = ctx.accounts.to_account_infos();
+
+        let instruction = &spl_token_lending::instruction::margin_borrow_reserve_liquidity(
+            *ctx.accounts.lending_program.key,
+            collateral_amount,
+            loan_amount,
+            spl_token_lending::instruction::BorrowAmountType::MarginBorrowAmount,
+            *ctx.accounts.source_collateral.key,
+            *ctx.accounts.loaned_vault.to_account_info().key,
+            *ctx.accounts.deposit_reserve.key,
+            *ctx.accounts.deposit_reserve_collateral_supply.key,
+            *ctx.accounts.deposit_reserve_collateral_fees_receiver.key,
+            *ctx.accounts.borrow_reserve.key,
+            *ctx.accounts.borrow_reserve_liquidity_supply.key,
+            *ctx.accounts.lending_market.key,
+            *ctx.accounts.lending_market_authority.key,
+            *ctx.accounts.vault_signer.key,
+            *ctx.accounts.obligation.key,
+            *ctx.accounts.obligation_token_mint.key,
+            *ctx.accounts.obligation_token_output.key,
+            *ctx.accounts.dex_market.key,
+            *ctx.accounts.dex_market_order_book_side.key,
+            *ctx.accounts.memory.key,
+            None,
+        );
+
+        let seeds = &[
+            ctx.accounts.margin_account.to_account_info().key.as_ref(),
+            &[ctx.accounts.margin_account.nonce],
+        ];
+        let signer = &[&seeds[..]];
+
+        invoke_signed(instruction, &accounts[1..], signer)?;
+
         Ok(())
     }
     /// Withdraw funds from an obligation account.
@@ -357,26 +391,33 @@ pub struct Repay<'info> {
 pub struct Borrow<'info> {
     // specify the correct lending program
     lending_program: AccountInfo<'info>,
-    // collateral_amount: u64,
-    // loan_amount: u64,
-    // amount_type: BorrowAmountType,
-    // source_collateral_pubkey: Pubkey,
-    // destination_liquidity_pubkey: Pubkey,
-    // deposit_reserve_pubkey: Pubkey,
-    // deposit_reserve_collateral_supply_pubkey: Pubkey,
-    // deposit_reserve_collateral_fees_receiver_pubkey: Pubkey,
-    // borrow_reserve_pubkey: Pubkey,
-    // borrow_reserve_liquidity_supply_pubkey: Pubkey,
-    // lending_market_pubkey: Pubkey,
-    // lending_market_authority_pubkey: Pubkey,
-    // user_transfer_authority_pubkey: Pubkey,
-    // obligation_pubkey: Pubkey,
-    // obligation_token_mint_pubkey: Pubkey,
-    // obligation_token_output_pubkey: Pubkey,
-    // dex_market_pubkey: Pubkey,
-    // dex_market_order_book_side_pubkey: Pubkey,
-    // memory_pubkey: Pubkey,
-    // deposit_reserve_collateral_host_pubkey: Option<Pubkey>,
+    #[account(mut)]
+    source_collateral: AccountInfo<'info>,
+    deposit_reserve: AccountInfo<'info>,
+    #[account(mut)]
+    deposit_reserve_collateral_supply: AccountInfo<'info>,
+    #[account(mut)]
+    deposit_reserve_collateral_fees_receiver: AccountInfo<'info>,
+    #[account(mut)]
+    borrow_reserve: AccountInfo<'info>,
+    #[account(mut)]
+    borrow_reserve_liquidity_supply: AccountInfo<'info>,
+    lending_market: AccountInfo<'info>,
+    lending_market_authority: AccountInfo<'info>,
+    obligation: AccountInfo<'info>,
+    obligation_token_mint: AccountInfo<'info>,
+    obligation_token_output: AccountInfo<'info>,
+    memory: AccountInfo<'info>,
+    dex_market: AccountInfo<'info>,
+    dex_market_order_book_side: AccountInfo<'info>,
+
+    /// User transfer authority
+    #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
+    vault_signer: AccountInfo<'info>,
+    #[account(mut)]
+    loaned_vault: CpiAccount<'info, TokenAccount>,
+    #[account(mut)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
 }
 #[derive(Accounts)]
 pub struct Liquidate<'info> {
