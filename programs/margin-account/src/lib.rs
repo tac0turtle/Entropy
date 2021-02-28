@@ -81,7 +81,10 @@ pub mod margin_account {
 
         // Mark account as having an open trade
         let margin_account = &mut ctx.accounts.margin_account;
-        margin_account.collateral_vault = *ctx.accounts.collateral_vault.to_account_info().key;
+        if margin_account.position.collateral_vault. ==  { // todo: here
+            margin_account.position.collateral_vault =
+                *ctx.accounts.destination_vault.to_account_info().key;
+        }
 
         Ok(())
     }
@@ -198,9 +201,17 @@ pub struct Liquidate<'info> {
 pub struct MarginAccount {
     /// The owner of this margin account.
     pub trader: Pubkey,
+    pub position: Position,
+
+    /// nonce for program derived address
+    pub nonce: u8,
+}
+
+/// Track margin account position.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct Position {
     /// Tracks the size of the loan to know if the amount being paid back is the total amount in order to unlock the account
     pub loan_amount: u64,
-    /// Open positions held by the margin account.
     // This account holds tokens from the loan before they are used in the trade and conversely to hold
     // tokens after closing the position and before repaying the loan.
     pub loaned_vault: Pubkey,
@@ -210,24 +221,7 @@ pub struct MarginAccount {
     // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
     // status is updated to available indicating that the trader can now withdraw the tokens.
     pub status: Status,
-
-    /// nonce for program derived address
-    pub nonce: u8,
 }
-
-// /// Open margin trade position.
-// #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-// pub struct Position {
-//     // This account holds tokens from the loan before they are used in the trade and conversely to hold
-//     // tokens after closing the position and before repaying the loan.
-//     pub loaned_tokens_vault: Pubkey,
-//     // Tokens are stored here when a position is opened (status becomes locked). When the loan is repaid,
-//     // status is updated to available and the trader is able to withdraw the tokens.
-//     pub collateral_tokens: Pubkey,
-//     // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
-//     // status is updated to available indicating that the trader can now withdraw the tokens.
-//     pub status: Status,
-// }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub enum Status {
