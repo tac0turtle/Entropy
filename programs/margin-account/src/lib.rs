@@ -47,6 +47,9 @@ pub mod margin_account {
         amount_in: u64,
         minimum_amount_out: u64,
     ) -> ProgramResult {
+        let accounts = ctx.accounts.to_account_infos();
+
+        // create the desired swap amount and minimum amout of slippage the user is willing to sustain
         let swap = spl_token_swap::instruction::Swap {
             amount_in,
             minimum_amount_out,
@@ -74,7 +77,7 @@ pub mod margin_account {
         ];
         let signer = &[&seeds[..]];
 
-        invoke_signed(instruction, &ctx.accounts.to_account_infos(), signer)?;
+        invoke_signed(instruction, &accounts[1..], signer)?;
 
         // Mark account as having an open trade
         let margin_account = &mut ctx.accounts.margin_account;
@@ -88,6 +91,8 @@ pub mod margin_account {
         amount_in: u64,
         minimum_amount_out: u64,
     ) -> ProgramResult {
+        let accounts = ctx.accounts.to_account_infos();
+
         let swap = spl_token_swap::instruction::Swap {
             amount_in,
             minimum_amount_out,
@@ -115,7 +120,7 @@ pub mod margin_account {
         ];
         let signer = &[&seeds[..]];
 
-        invoke_signed(instruction, &ctx.accounts.to_account_infos(), signer)?;
+        invoke_signed(instruction, &accounts[1..], signer)?;
 
         Ok(())
     }
