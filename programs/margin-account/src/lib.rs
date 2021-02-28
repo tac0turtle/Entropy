@@ -81,9 +81,9 @@ pub mod margin_account {
 
         // Mark account as having an open trade
         let margin_account = &mut ctx.accounts.margin_account;
-        if margin_account.position.collateral_vault == Pubkey::default() {
+        if !margin_account.position.collateral_vault.is_some() {
             margin_account.position.collateral_vault =
-                *ctx.accounts.destination_vault.to_account_info().key;
+                Some(*ctx.accounts.destination_vault.to_account_info().key);
         }
 
         Ok(())
@@ -217,7 +217,7 @@ pub struct Position {
     pub loaned_vault: Pubkey,
     // Tokens are stored here when a position is opened (status becomes locked). When the loan is repaid,
     // status is updated to available and the trader is able to withdraw the tokens.
-    pub collateral_vault: Pubkey,
+    pub collateral_vault: Option<Pubkey>,
     // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
     // status is updated to available indicating that the trader can now withdraw the tokens.
     pub status: Status,
