@@ -206,27 +206,7 @@ pub mod margin_account {
 pub struct Initialize<'info> {
     #[account(init)]
     margin_account: ProgramAccount<'info, MarginAccount>,
-    #[account(mut)]
-    vault: CpiAccount<'info, TokenAccount>,
     rent: Sysvar<'info, Rent>,
-}
-
-impl<'info> Initialize<'info> {
-    fn accounts(ctx: &Context<Initialize>, nonce: u8) -> Result<()> {
-        let margin_authority = Pubkey::create_program_address(
-            &[
-                ctx.accounts.margin_account.to_account_info().key.as_ref(),
-                &[nonce],
-            ],
-            ctx.program_id,
-        )
-        .map_err(|_| ErrorCode::InvalidProgramAddress)?;
-        if ctx.accounts.vault.owner != margin_authority {
-            return Err(ErrorCode::InvalidVaultOwner)?;
-        }
-
-        Ok(())
-    }
 }
 
 /// Initialize new margin collateral obligation.
