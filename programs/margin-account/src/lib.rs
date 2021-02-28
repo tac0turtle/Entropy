@@ -9,7 +9,7 @@ pub mod margin_account {
     use super::*;
 
     /// Initialize new margin account under a specific trader's address.
-    #[access_control(Initialize::accounts(&ctx, nonce))]
+    // #[access_control(Initialize::accounts(&ctx, nonce))]
     pub fn initialize(ctx: Context<Initialize>, trader: Pubkey, nonce: u8) -> ProgramResult {
         let margin_account = &mut ctx.accounts.margin_account;
         margin_account.trader = trader;
@@ -81,9 +81,12 @@ pub mod margin_account {
 
         // Mark account as having an open trade
         let margin_account = &mut ctx.accounts.margin_account;
-        if !margin_account.position.collateral_vault.is_some() {
-            margin_account.position.collateral_vault =
-                Some(*ctx.accounts.destination_vault.to_account_info().key);
+        let position = margin_account
+            .position
+            .as_mut()
+            .ok_or(ErrorCode::InvalidProgramAddress)?;
+        if !position.collateral_vault.is_some() {
+            position.collateral_vault = Some(*ctx.accounts.destination_vault.to_account_info().key);
         }
 
         Ok(())
@@ -201,14 +204,14 @@ pub struct Liquidate<'info> {
 pub struct MarginAccount {
     /// The owner of this margin account.
     pub trader: Pubkey,
-    pub position: Position,
+    pub position: Option<Position>,
 
     /// nonce for program derived address
     pub nonce: u8,
 }
 
 /// Track margin account position.
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
 pub struct Position {
     /// Tracks the size of the loan to know if the amount being paid back is the total amount in order to unlock the account
     pub loan_amount: u64,
@@ -227,6 +230,12 @@ pub struct Position {
 pub enum Status {
     Locked,
     Available,
+}
+
+impl Default for Status {
+    fn default() -> Status {
+        Status::Available
+    }
 }
 
 #[error]
