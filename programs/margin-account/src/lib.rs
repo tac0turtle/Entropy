@@ -140,6 +140,9 @@ pub mod margin_account {
         if loan_amount == 0 || collateral_amount == 0 {
             return Err(ErrorCode::InvalidAmount.into());
         };
+        if ctx.accounts.margin_account.position.is_some() {
+            return Err(ErrorCode::AccountInUse.into());
+        }
 
         let accounts = ctx.accounts.to_account_infos();
 
@@ -177,13 +180,13 @@ pub mod margin_account {
 
         // update margin account with loan_vault and total
         let margin = &mut ctx.accounts.margin_account;
-        let position = margin
-            .position
-            .as_mut()
-            .ok_or(ErrorCode::InvalidProgramAddress)?;
-        position.loaned_vault = *ctx.accounts.loaned_vault.to_account_info().key;
-        position.loan_amount += loan_amount;
-        position.status = Status::Locked;
+        let position = Position {
+            loan_amount: loan_amount,
+            status: Status::Locked,
+            loaned_vault: *ctx.accounts.loaned_vault.to_account_info().key,
+            collateral_vault: None,
+        };
+        margin.position = Some(position);
 
         Ok(())
     }
@@ -402,4 +405,6 @@ pub enum ErrorCode {
     InvalidVaultOwner,
     #[msg("Amount has to be greater than 0")]
     InvalidAmount,
+    #[msg("loan has been taken out fo this account")]
+    AccountInUse,
 }
