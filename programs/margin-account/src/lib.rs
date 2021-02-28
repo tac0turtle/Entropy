@@ -207,6 +207,12 @@ pub mod margin_account {
 
         invoke_signed(instruction, &accounts[1..], signer)?;
 
+        // update margin account with loan_vault and total
+        let margin = &mut ctx.accounts.margin_account;
+        margin.position.loaned_vault = *ctx.accounts.loaned_vault.to_account_info().key;
+        margin.position.loan_amount += loan_amount;
+        margin.position.status = Status::Locked;
+
         Ok(())
     }
     /// Withdraw funds from an obligation account.
