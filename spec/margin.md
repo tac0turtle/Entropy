@@ -41,15 +41,15 @@ pub struct MarginAccount {
 pub struct Position {
     // This account holds tokens from the loan before they are used in the trade and conversely to hold
     // tokens after closing the position and before repaying the loan. 
-    pub loan_denominated_tokens: CpiAccount<'info, TokenAccount>,,
+    pub loan_denominated_tokens: PubKey,
 
     // Tokens are stored here when a position is opened (status becomes locked). When the loan is repayed,
     // status is updated to available and the trader is able to withdraw the tokens.
-    pub collateral_denominated_tokens: CpiAccount<'info, TokenAccount>,
+    pub collateral_denominated_tokens: PubKey,
 
     // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
     // status is updated to available indicating that the trader can now withdraw the tokens.
-    pub status: Status
+    pub status: Status,
 }
 
 pub enum Status {
