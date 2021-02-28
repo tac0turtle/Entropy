@@ -92,7 +92,101 @@ pub mod margin_account {
         Ok(())
     }
 
-    pub fn repay(_ctx: Context<Repay>, _amount: u64) -> ProgramResult {
+    /// repay repays the outstanding loan. If the user is not able to return what they took out it is taken from the collateral
+    pub fn repay(ctx: Context<Repay>, amount: u64) -> ProgramResult {
+        if amount == 0 {
+            return Err(ErrorCode::InvalidAmount.into());
+        };
+
+        let instruction = &spl_token_lending::instruction::repay_reserve_liquidity(
+            *ctx.accounts.lending_program.key,
+            amount,
+            *ctx.accounts.loan_vault.to_account_info().key,
+            *ctx.accounts.destination_coll_account.key,
+            *ctx.accounts.repay_reserve_account.key,
+            *ctx.accounts.repay_reserve_spl_acccount.key,
+            *ctx.accounts.withdraw_reserve.key,
+            *ctx.accounts.withdraw_reserve_collateral.key,
+            *ctx.accounts.obligation.key,
+            *ctx.accounts.obligation_mint.key,
+            *ctx.accounts.obligation_input.key,
+            *ctx.accounts.lending_market.key,
+            *ctx.accounts.derived_lending_authority.key,
+            *ctx.accounts.vault_signer.key,
+        );
+
+        let seeds = &[
+            ctx.accounts.margin_account.to_account_info().key.as_ref(),
+            &[ctx.accounts.margin_account.nonce],
+        ];
+        let signer = &[&seeds[..]];
+
+        invoke_signed(instruction, &ctx.accounts.to_account_infos(), signer)?;
+
+        // Mark account as having an open trade
+        let margin_account = &mut ctx.accounts.margin_account;
+        let position = margin_account
+            .position
+            .as_mut()
+            .ok_or(ErrorCode::InvalidProgramAddress)?;
+
+        position.loan_amount -= amount;
+        if position.loan_amount == 0 {
+            position.status = Status::Available;
+        }
+
+        Ok(())
+    }
+
+    pub fn borrow(ctx: Context<Borrow>, loan_amount: u64, collateral_amount: u64) -> ProgramResult {
+        if loan_amount == 0 || collateral_amount == 0 {
+            return Err(ErrorCode::InvalidAmount.into());
+        };
+
+        let accounts = ctx.accounts.to_account_infos();
+
+        let instruction = &spl_token_lending::instruction::margin_borrow_reserve_liquidity(
+            *ctx.accounts.lending_program.key,
+            collateral_amount,
+            loan_amount,
+            spl_token_lending::instruction::BorrowAmountType::MarginBorrowAmount,
+            *ctx.accounts.source_collateral.key,
+            *ctx.accounts.loaned_vault.to_account_info().key,
+            *ctx.accounts.deposit_reserve.key,
+            *ctx.accounts.deposit_reserve_collateral_supply.key,
+            *ctx.accounts.deposit_reserve_collateral_fees_receiver.key,
+            *ctx.accounts.borrow_reserve.key,
+            *ctx.accounts.borrow_reserve_liquidity_supply.key,
+            *ctx.accounts.lending_market.key,
+            *ctx.accounts.lending_market_authority.key,
+            *ctx.accounts.vault_signer.key,
+            *ctx.accounts.obligation.key,
+            *ctx.accounts.obligation_token_mint.key,
+            *ctx.accounts.obligation_token_output.key,
+            *ctx.accounts.dex_market.key,
+            *ctx.accounts.dex_market_order_book_side.key,
+            *ctx.accounts.memory.key,
+            None,
+        );
+
+        let seeds = &[
+            ctx.accounts.margin_account.to_account_info().key.as_ref(),
+            &[ctx.accounts.margin_account.nonce],
+        ];
+        let signer = &[&seeds[..]];
+
+        invoke_signed(instruction, &accounts[1..], signer)?;
+
+        // update margin account with loan_vault and total
+        let margin = &mut ctx.accounts.margin_account;
+        let position = margin
+            .position
+            .as_mut()
+            .ok_or(ErrorCode::InvalidProgramAddress)?;
+        position.loaned_vault = *ctx.accounts.loaned_vault.to_account_info().key;
+        position.loan_amount += loan_amount;
+        position.status = Status::Locked;
+
         Ok(())
     }
     /// Withdraw funds from an obligation account.
@@ -206,13 +300,45 @@ pub struct TradeAMM<'info> {
     token_program: AccountInfo<'info>,
 }
 
-//? Possibly add cancel position, if it cannot be combined with close.
-
 #[derive(Accounts)]
 pub struct Repay<'info> {
-    // TODO
-    authority: AccountInfo<'info>,
+    lending_program: AccountInfo<'info>,
+    /// Account which is repaying the loan.
+    #[account(mut)]
+    source_liquidity_acc: AccountInfo<'info>,
+    /// This account specifies where to send the obligation account after repay
+    #[account(mut)]
+    destination_coll_account: AccountInfo<'info>,
+    #[account(mut)]
+    repay_reserve_account: AccountInfo<'info>,
+    #[account(mut)]
+    repay_reserve_spl_acccount: AccountInfo<'info>,
+    withdraw_reserve: AccountInfo<'info>,
+    /// User token account to withdraw obligation to
+    #[account(mut)]
+    withdraw_reserve_collateral: AccountInfo<'info>,
+    #[account(mut)]
+    obligation: AccountInfo<'info>,
+    #[account(mut)]
+    obligation_mint: AccountInfo<'info>,
+    #[account(mut)]
+    obligation_input: AccountInfo<'info>,
+    lending_market: AccountInfo<'info>,
+    derived_lending_authority: AccountInfo<'info>,
+
+    /// Loan vault are the tokens that will be used to repay the loan.
+    #[account(mut)]
+    loan_vault: CpiAccount<'info, TokenAccount>,
+
+    #[account(mut)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
+    #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
+    vault_signer: AccountInfo<'info>,
+    #[account("token_program.key == &token::ID")]
+    token_program: AccountInfo<'info>,
+    clock: Sysvar<'info, Clock>,
 }
+
 #[derive(Accounts)]
 pub struct Borrow<'info> {
     // specify the correct lending program
