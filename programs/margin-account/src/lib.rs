@@ -42,7 +42,7 @@ pub mod margin_account {
 
     /// Trade on an amm with the loaned tokens.
     pub fn trade_amm(
-        ctx: Context<TradeAMM>,
+        ctx: Context<TradeAmm>,
         amount_in: u64,
         minimum_amount_out: u64,
     ) -> ProgramResult {
@@ -84,7 +84,7 @@ pub mod margin_account {
             .position
             .as_mut()
             .ok_or(ErrorCode::InvalidProgramAddress)?;
-        if !position.collateral_vault.is_some() {
+        if position.collateral_vault.is_none() {
             position.collateral_vault = Some(*ctx.accounts.destination_vault.to_account_info().key);
         }
 
@@ -180,13 +180,12 @@ pub mod margin_account {
 
         // update margin account with loan_vault and total
         let margin = &mut ctx.accounts.margin_account;
-        let position = Position {
-            loan_amount: loan_amount,
+        margin.position = Some(Position {
+            loan_amount,
             status: Status::Locked,
             loaned_vault: *ctx.accounts.loaned_vault.to_account_info().key,
             collateral_vault: None,
-        };
-        margin.position = Some(position);
+        });
 
         Ok(())
     }
@@ -249,7 +248,7 @@ pub struct Withdraw<'info> {
 
 // TradeAMM takes the tokens that are in the margin account and executes a trade with them.
 #[derive(Accounts)]
-pub struct TradeAMM<'info> {
+pub struct TradeAmm<'info> {
     #[account(signer)]
     trader: AccountInfo<'info>,
     /// accounts needed to call
