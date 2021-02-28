@@ -116,7 +116,7 @@ describe("margin-account", () => {
     // Setup lending market for reserves
     const lendingMarket = new anchor.web3.Account();
     create_signers.push(lendingMarket);
-    tx.add(await createSolAccountInstruction(lendingMarket, provider, lendingProgram, 500, provider.wallet.publicKey));
+    tx.add(await createSolAccountInstruction(lendingMarket, provider, lendingProgram, 160, provider.wallet.publicKey));
     tx.add(initLendingMarketInstruction(
       lendingMarket.publicKey, // new account key
       provider.wallet.publicKey, // market owner
@@ -124,6 +124,12 @@ describe("margin-account", () => {
       lendingProgram,
     ),
     );
+
+    // TODO can remove this and not split txs, doing here to pinpoint issues while testing
+    // Split the txs into two, because over cap
+    await provider.send(tx, create_signers);
+    tx = new anchor.web3.Transaction();
+    create_signers = []
 
 
     let [
@@ -137,7 +143,7 @@ describe("margin-account", () => {
     // Initialize reserves
     const depositReserve = new anchor.web3.Account();
     create_signers.push(depositReserve);
-    tx.add(await createSolAccountInstruction(depositReserve, provider, lendingProgram, 500, provider.wallet.publicKey));
+    tx.add(await createSolAccountInstruction(depositReserve, provider, lendingProgram, 602, provider.wallet.publicKey));
 
     tx.add(initReserveInstruction(
       new anchor.BN(10000), // liquidity
@@ -157,10 +163,16 @@ describe("margin-account", () => {
     ),
     );
 
+    // TODO can remove this and not split txs, doing here to pinpoint issues while testing
+    // Split the txs into two, because over cap
+    await provider.send(tx, create_signers);
+    tx = new anchor.web3.Transaction();
+    create_signers = []
+
     // TODO not certain about these, should the reserve be the same or swapped pair?
     const borrowReserve = new anchor.web3.Account();
     create_signers.push(borrowReserve);
-    tx.add(await createSolAccountInstruction(borrowReserve, provider, lendingProgram, 500, provider.wallet.publicKey));
+    tx.add(await createSolAccountInstruction(borrowReserve, provider, lendingProgram, 602, provider.wallet.publicKey));
 
     tx.add(initReserveInstruction(
       new anchor.BN(10000), // liquidity
