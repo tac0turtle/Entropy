@@ -206,7 +206,7 @@ describe("margin-account", () => {
         depositReserve: depositReserve.publicKey,
         borrowReserve: borrowReserve.publicKey,
         obligation: obligation.publicKey,
-        obligationTokenMint: liquidityMint,
+        obligationTokenMint: obligationMint,
         obligationTokenOutput: obligationTokenOutput.publicKey,
         obligationTokenOwner: obligationTokenOwner.publicKey,
         lendingMarket: lendingMarket.publicKey,
