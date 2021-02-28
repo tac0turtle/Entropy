@@ -20,6 +20,7 @@ pub mod margin_account {
 
     /// Initialize a collateral account to be used to open a position.
     pub fn init_obligation(ctx: Context<InitObligation>) -> ProgramResult {
+        let accounts = ctx.accounts.to_account_infos();
         // Initialize the obligation through the token lending program.
         invoke(
             &spl_token_lending::instruction::init_obligation(
@@ -32,7 +33,9 @@ pub mod margin_account {
                 *ctx.accounts.obligation_token_output.key,
                 *ctx.accounts.obligation_token_owner.key,
             ),
-            &ctx.accounts.to_account_infos(),
+            // First account here is the lending program account, but indexes for obligation call
+            // need to be indexed correctly
+            &accounts[1..],
         )?;
 
         Ok(())
@@ -168,17 +171,21 @@ pub struct InitObligation<'info> {
     lending_program: AccountInfo<'info>,
     deposit_reserve: AccountInfo<'info>,
     borrow_reserve: AccountInfo<'info>,
-    // ? This probably needs to be initialized
+    #[account(mut)]
     obligation: AccountInfo<'info>,
-    // ?
     #[account(mut)]
     obligation_token_mint: AccountInfo<'info>,
-    // ?
     #[account(mut)]
     obligation_token_output: AccountInfo<'info>,
     obligation_token_owner: AccountInfo<'info>,
     lending_market: AccountInfo<'info>,
     lending_market_authority: AccountInfo<'info>,
+
+    //? These may not be needed, but missing an account on CPI call
+    clock: Sysvar<'info, Clock>,
+    rent: Sysvar<'info, Rent>,
+    #[account("token_program.key == &token::ID")]
+    token_program: AccountInfo<'info>,
 }
 
 #[derive(Accounts)]
