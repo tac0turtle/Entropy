@@ -135,6 +135,61 @@ pub mod margin_account {
 
         Ok(())
     }
+
+    pub fn borrow(ctx: Context<Borrow>, loan_amount: u64, collateral_amount: u64) -> ProgramResult {
+        if loan_amount == 0 || collateral_amount == 0 {
+            return Err(ErrorCode::InvalidAmount.into());
+        };
+        if ctx.accounts.margin_account.position.is_some() {
+            return Err(ErrorCode::AccountInUse.into());
+        }
+
+        let accounts = ctx.accounts.to_account_infos();
+
+        let instruction = &spl_token_lending::instruction::margin_borrow_reserve_liquidity(
+            *ctx.accounts.lending_program.key,
+            collateral_amount,
+            loan_amount,
+            spl_token_lending::instruction::BorrowAmountType::MarginBorrowAmount,
+            *ctx.accounts.source_collateral.key,
+            *ctx.accounts.loaned_vault.to_account_info().key,
+            *ctx.accounts.deposit_reserve.key,
+            *ctx.accounts.deposit_reserve_collateral_supply.key,
+            *ctx.accounts.deposit_reserve_collateral_fees_receiver.key,
+            *ctx.accounts.borrow_reserve.key,
+            *ctx.accounts.borrow_reserve_liquidity_supply.key,
+            *ctx.accounts.lending_market.key,
+            *ctx.accounts.lending_market_authority.key,
+            *ctx.accounts.vault_signer.key,
+            *ctx.accounts.obligation.key,
+            *ctx.accounts.obligation_token_mint.key,
+            *ctx.accounts.obligation_token_output.key,
+            *ctx.accounts.dex_market.key,
+            *ctx.accounts.dex_market_order_book_side.key,
+            *ctx.accounts.memory.key,
+            None,
+        );
+
+        let seeds = &[
+            ctx.accounts.margin_account.to_account_info().key.as_ref(),
+            &[ctx.accounts.margin_account.nonce],
+        ];
+        let signer = &[&seeds[..]];
+
+        invoke_signed(instruction, &accounts[1..], signer)?;
+
+        // update margin account with loan_vault and total
+        let margin = &mut ctx.accounts.margin_account;
+        let position = Position {
+            loan_amount: loan_amount,
+            status: Status::Locked,
+            loaned_vault: *ctx.accounts.loaned_vault.to_account_info().key,
+            collateral_vault: None,
+        };
+        margin.position = Some(position);
+
+        Ok(())
+    }
     /// Withdraw funds from an obligation account.
     pub fn withdraw(_ctx: Context<Withdraw>) -> ProgramResult {
         // TODO
@@ -264,6 +319,39 @@ pub struct Repay<'info> {
     token_program: AccountInfo<'info>,
     clock: Sysvar<'info, Clock>,
 }
+
+#[derive(Accounts)]
+pub struct Borrow<'info> {
+    // specify the correct lending program
+    lending_program: AccountInfo<'info>,
+    #[account(mut)]
+    source_collateral: AccountInfo<'info>,
+    deposit_reserve: AccountInfo<'info>,
+    #[account(mut)]
+    deposit_reserve_collateral_supply: AccountInfo<'info>,
+    #[account(mut)]
+    deposit_reserve_collateral_fees_receiver: AccountInfo<'info>,
+    #[account(mut)]
+    borrow_reserve: AccountInfo<'info>,
+    #[account(mut)]
+    borrow_reserve_liquidity_supply: AccountInfo<'info>,
+    lending_market: AccountInfo<'info>,
+    lending_market_authority: AccountInfo<'info>,
+    obligation: AccountInfo<'info>,
+    obligation_token_mint: AccountInfo<'info>,
+    obligation_token_output: AccountInfo<'info>,
+    memory: AccountInfo<'info>,
+    dex_market: AccountInfo<'info>,
+    dex_market_order_book_side: AccountInfo<'info>,
+
+    /// User transfer authority
+    #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
+    vault_signer: AccountInfo<'info>,
+    #[account(mut)]
+    loaned_vault: CpiAccount<'info, TokenAccount>,
+    #[account(mut)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
+}
 #[derive(Accounts)]
 pub struct Liquidate<'info> {
     // TODO
@@ -317,4 +405,6 @@ pub enum ErrorCode {
     InvalidVaultOwner,
     #[msg("Amount has to be greater than 0")]
     InvalidAmount,
+    #[msg("loan has been taken out fo this account")]
+    AccountInUse,
 }
