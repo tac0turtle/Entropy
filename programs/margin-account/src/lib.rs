@@ -165,6 +165,14 @@ pub mod margin_account {
 
         Ok(())
     }
+
+    pub fn borrorw(
+        _ctx: Context<Borrow>,
+        _loan_amount: uint64,
+        _collateral_amount: uint64,
+    ) -> ProgramResult {
+        Ok(())
+    }
     /// Withdraw funds from an obligation account.
     pub fn withdraw(_ctx: Context<Withdraw>) -> ProgramResult {
         // TODO
@@ -343,6 +351,32 @@ pub struct Repay<'info> {
     #[account("token_program.key == &token::ID")]
     token_program: AccountInfo<'info>,
     clock: Sysvar<'info, Clock>,
+}
+
+#[derive(Accounts)]
+pub struct Borrow<'info> {
+    // specify the correct lending program
+    lending_program: AccountInfo<'info>,
+    // collateral_amount: u64,
+    // loan_amount: u64,
+    // amount_type: BorrowAmountType,
+    // source_collateral_pubkey: Pubkey,
+    // destination_liquidity_pubkey: Pubkey,
+    // deposit_reserve_pubkey: Pubkey,
+    // deposit_reserve_collateral_supply_pubkey: Pubkey,
+    // deposit_reserve_collateral_fees_receiver_pubkey: Pubkey,
+    // borrow_reserve_pubkey: Pubkey,
+    // borrow_reserve_liquidity_supply_pubkey: Pubkey,
+    // lending_market_pubkey: Pubkey,
+    // lending_market_authority_pubkey: Pubkey,
+    // user_transfer_authority_pubkey: Pubkey,
+    // obligation_pubkey: Pubkey,
+    // obligation_token_mint_pubkey: Pubkey,
+    // obligation_token_output_pubkey: Pubkey,
+    // dex_market_pubkey: Pubkey,
+    // dex_market_order_book_side_pubkey: Pubkey,
+    // memory_pubkey: Pubkey,
+    // deposit_reserve_collateral_host_pubkey: Option<Pubkey>,
 }
 #[derive(Accounts)]
 pub struct Liquidate<'info> {
