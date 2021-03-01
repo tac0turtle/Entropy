@@ -134,8 +134,8 @@ impl Reserve {
         if close_amount > 0 {
             return Ok(LiquidateResult {
                 withdraw_amount: obligation.deposited_collateral_tokens,
-                repay_amount: close_amount,
                 settle_amount: obligation.borrowed_liquidity_wads,
+                repay_amount: close_amount,
             });
         }
 
@@ -172,8 +172,8 @@ impl Reserve {
 
             Ok(LiquidateResult {
                 withdraw_amount,
-                repay_amount,
                 settle_amount,
+                repay_amount,
             })
         } else {
             Err(LendingError::LiquidationTooSmall.into())

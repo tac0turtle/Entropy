@@ -15,22 +15,26 @@ describe("margin-account", () => {
 
   const program = anchor.workspace.MarginAccount;
 
-  let obligationMint = null;
-  let obligationVault = null;
-  let obligationReserveVault = null;
+  let liquidityMint = null;
+  let liquidityVault = null;
+  let liquidityReserveVault = null;
+  let userLiquidity = null;
+  let liquidityFeesReceiver = null;
   let collateralMint = null;
   let collateralVault = null;
   let collateralReserveVault = null;
+  let userCollateral = null;
+  let collateralFeesReceiver = null;
 
   it("Sets up initial test state", async () => {
     // TODO all this could be done in one tx, idc this is quicker
     // Setup vault accounts for interactions
-    const [_oblMint, _oblVault] = await serumCmn.createMintAndVault(
+    const [_liqMint, _liqVault] = await serumCmn.createMintAndVault(
       program.provider,
       new anchor.BN(2000000)
     );
-    obligationMint = _oblMint;
-    obligationVault = _oblVault;
+    liquidityMint = _liqMint;
+    liquidityVault = _liqVault;
 
     const [_colMint, _colVault] = await serumCmn.createMintAndVault(
       program.provider,
@@ -39,13 +43,37 @@ describe("margin-account", () => {
     collateralMint = _colMint;
     collateralVault = _colVault;
 
-    obligationReserveVault = await serumCmn.createTokenAccount(
+    liquidityReserveVault = await serumCmn.createTokenAccount(
       program.provider,
-      obligationMint,
+      liquidityMint,
+      program.provider.wallet.publicKey
+    );
+
+    userLiquidity = await serumCmn.createTokenAccount(
+      program.provider,
+      liquidityMint,
+      program.provider.wallet.publicKey
+    );
+
+    liquidityFeesReceiver = await serumCmn.createTokenAccount(
+      program.provider,
+      liquidityMint,
       program.provider.wallet.publicKey
     );
 
     collateralReserveVault = await serumCmn.createTokenAccount(
+      program.provider,
+      collateralMint,
+      program.provider.wallet.publicKey
+    );
+
+    userCollateral = await serumCmn.createTokenAccount(
+      program.provider,
+      collateralMint,
+      program.provider.wallet.publicKey
+    );
+
+    collateralFeesReceiver = await serumCmn.createTokenAccount(
       program.provider,
       collateralMint,
       program.provider.wallet.publicKey
@@ -85,60 +113,26 @@ describe("margin-account", () => {
     // Create transaction to create all accounts (need to avoid tx limit)
     let tx = new anchor.web3.Transaction();
     let create_signers = []
-    const TODO = null
 
-    // Initialize reserves
-    const depositReserve = new anchor.web3.Account();
-    create_signers.push(depositReserve);
-    tx.add(await createSolAccountInstruction(depositReserve, provider, program, 500, provider.wallet.publicKey));
+    const transferAuthority = new anchor.web3.Account();
 
-    create_signers.push(provider.wallet.publicKey);
-    tx.add(initReserveInstruction(
-      new anchor.BN(10000), // liquidity
-      TODO, // from
-      TODO, // to (init)
-      depositReserve, // reserve account
-      TODO, // liquidity mint
-      TODO, // liq supply (init)
-      collateralMint, // coll mint (init)
-      collateralReserveVault, // col supply (init)
-      TODO, // col output (init)
-      TODO, // lendingmarket
-      TODO, // lendingmarketauth
-      TODO, // transferauth
-      lendingProgram, // Lending program
+    // Setup lending market for reserves
+    const lendingMarket = new anchor.web3.Account();
+    create_signers.push(lendingMarket);
+    tx.add(await createSolAccountInstruction(lendingMarket, provider, lendingProgram, 160, provider.wallet.publicKey));
+    tx.add(initLendingMarketInstruction(
+      lendingMarket.publicKey, // new account key
+      provider.wallet.publicKey, // market owner
+      liquidityMint, // quote mint
+      lendingProgram,
     ),
     );
 
-    // TODO
-    const borrowReserve = new anchor.web3.Account();
-    create_signers.push(borrowReserve);
-    tx.add(await createSolAccountInstruction(borrowReserve, provider, program, 500, provider.wallet.publicKey));
-
+    // TODO can remove this and not split txs, doing here to pinpoint issues while testing
     // Split the txs into two, because over cap
     await provider.send(tx, create_signers);
     tx = new anchor.web3.Transaction();
     create_signers = []
-
-    const obligation = new anchor.web3.Account();
-    create_signers.push(obligation);
-    tx.add(await createSolAccountInstruction(obligation, provider, program, 500, provider.wallet.publicKey));
-
-    // Lending obligation output account
-    const obligationTokenOutput = new anchor.web3.Account();
-    create_signers.push(obligationTokenOutput);
-    tx.add(await createSolAccountInstruction(obligationTokenOutput, provider, program, 500, provider.wallet.publicKey));
-
-    const obligationTokenOwner = provider.wallet.publicKey;
-
-    // TODO should be setup with deposit reserve
-    const lendingMarket = new anchor.web3.Account();
-    create_signers.push(lendingMarket);
-    tx.add(await createSolAccountInstruction(lendingMarket, provider, program, 500, provider.wallet.publicKey));
-
-
-    // Execute the transaction against the cluster.
-    await provider.send(tx, create_signers);
 
     let [
       _lendingMarketAuthority,
@@ -147,6 +141,79 @@ describe("margin-account", () => {
       lendingProgram
     );
     const lendingMarketAuthority = _lendingMarketAuthority;
+
+    // Initialize reserves
+    const depositReserve = new anchor.web3.Account();
+    create_signers.push(depositReserve);
+    create_signers.push(transferAuthority);
+    tx.add(await createSolAccountInstruction(depositReserve, provider, lendingProgram, 602, provider.wallet.publicKey));
+
+    tx.add(initReserveInstruction(
+      new anchor.BN(10000), // liquidity
+      liquidityVault, // from
+      userCollateral, // to (init)
+      depositReserve.publicKey, // reserve account
+      liquidityMint, // liquidity mint
+      liquidityReserveVault, // liq supply (init)
+      collateralMint, // coll mint (init)
+      collateralReserveVault, // col supply (init)
+      collateralFeesReceiver, // col output (init)
+      lendingMarket.publicKey, // lending market
+      provider.wallet.publicKey, // lending market owner
+      provider.wallet.publicKey, // lending market auth
+      transferAuthority.publicKey, // transferauth
+      lendingProgram, // Lending program
+    ),
+    );
+
+    // TODO can remove this and not split txs, doing here to pinpoint issues while testing
+    // Split the txs into two, because over cap
+    await provider.send(tx, create_signers);
+    tx = new anchor.web3.Transaction();
+    create_signers = []
+
+    // TODO not certain about these, should the reserve be the same or swapped pair?
+    const borrowReserve = new anchor.web3.Account();
+    create_signers.push(borrowReserve);
+    tx.add(await createSolAccountInstruction(borrowReserve, provider, lendingProgram, 602, provider.wallet.publicKey));
+
+    tx.add(initReserveInstruction(
+      new anchor.BN(10000), // liquidity
+      collateralVault, // from
+      userLiquidity, // to (init)
+      borrowReserve.publicKey, // reserve account
+      collateralMint, // liquidity mint
+      collateralReserveVault, // liq supply (init)
+      liquidityMint, // coll mint (init)
+      liquidityReserveVault, // col supply (init)
+      liquidityFeesReceiver, // col output (init)
+      lendingMarket.publicKey, // lending market
+      provider.wallet.publicKey, // lending market owner
+      provider.wallet.publicKey, // lending market auth
+      provider.wallet.publicKey, // transferauth
+      lendingProgram, // Lending program
+    ),
+    );
+
+    // Split the txs into two, because over cap
+    await provider.send(tx, create_signers);
+    tx = new anchor.web3.Transaction();
+    create_signers = []
+
+    const obligation = new anchor.web3.Account();
+    create_signers.push(obligation);
+    tx.add(await createSolAccountInstruction(obligation, provider, program.programId, 500, provider.wallet.publicKey));
+
+    // Lending obligation output account
+    const obligationTokenOutput = new anchor.web3.Account();
+    create_signers.push(obligationTokenOutput);
+    tx.add(await createSolAccountInstruction(obligationTokenOutput, provider, program.programId, 500, provider.wallet.publicKey));
+
+    const obligationTokenOwner = provider.wallet.publicKey;
+
+    // Execute the transaction against the cluster.
+    await provider.send(tx, create_signers);
+
 
     await program.rpc.initObligation({
       accounts: {
@@ -176,7 +243,7 @@ async function createSolAccountInstruction(account, provider, program, size, fro
     lamports: await provider.connection.getMinimumBalanceForRentExemption(
       size
     ),
-    programId: program.programId,
+    programId: program,
   });
 }
 
@@ -194,6 +261,7 @@ const initReserveInstruction = (
   collateralSupply,
   collateralOutput,
   lendingMarket,
+  lendingMarketOwner,
   lendingMarketAuthority,
   transferAuthority,
 
@@ -245,10 +313,43 @@ const initReserveInstruction = (
     // Oyster had lending market a signer, seems wrong
     { pubkey: lendingMarket, isSigner: false, isWritable: true },
     { pubkey: lendingMarketOwner, isSigner: true, isWritable: true },
-    // * derived, maybe don't need to include?
     { pubkey: lendingMarketAuthority, isSigner: false, isWritable: false },
     { pubkey: transferAuthority, isSigner: false, isWritable: false },
     { pubkey: anchor.web3.SYSVAR_CLOCK_PUBKEY, isSigner: false, isWritable: false },
+    { pubkey: anchor.web3.SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
+    { pubkey: TokenInstructions.TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+  ];
+  return new anchor.web3.TransactionInstruction({
+    keys,
+    programId: lendingProgram,
+    data,
+  });
+};
+
+const initLendingMarketInstruction = (
+  lendingMarketPubkey,
+  lendingMarketOwner,
+  quoteTokenMint,
+
+  lendingProgram,
+) => {
+  const dataLayout = BufferLayout.struct([
+    BufferLayout.u8("instruction"),
+    publicKey("marketOwner"),
+  ]);
+
+  const data = Buffer.alloc(dataLayout.span);
+  dataLayout.encode(
+    {
+      instruction: 0, // Init lending market
+      marketOwner: lendingMarketOwner
+    },
+    data
+  );
+
+  const keys = [
+    { pubkey: lendingMarketPubkey, isSigner: false, isWritable: true },
+    { pubkey: quoteTokenMint, isSigner: false, isWritable: false },
     { pubkey: anchor.web3.SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
     { pubkey: TokenInstructions.TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
@@ -288,4 +389,22 @@ const uint64 = (property = "uint64") => {
   };
 
   return layout;
+};
+
+const publicKey = (property = "publicKey") => {
+  const publicKeyLayout = BufferLayout.blob(32, property);
+
+  const _decode = publicKeyLayout.decode.bind(publicKeyLayout);
+  const _encode = publicKeyLayout.encode.bind(publicKeyLayout);
+
+  publicKeyLayout.decode = (buffer, offset) => {
+    const data = _decode(buffer, offset);
+    return new PublicKey(data);
+  };
+
+  publicKeyLayout.encode = (key, buffer, offset) => {
+    return _encode(key.toBuffer(), buffer, offset);
+  };
+
+  return publicKeyLayout;
 };
