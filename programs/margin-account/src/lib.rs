@@ -197,7 +197,7 @@ pub mod margin_account {
         let margin_account = &mut ctx.accounts.margin_account;
         let position = margin_account
             .position
-            .as_mut()
+            .as_ref()
             .ok_or(ErrorCode::WithdrawDisabled)?;
         if position.status == Status::Locked {
             return Err(ErrorCode::WithdrawDisabled.into());
