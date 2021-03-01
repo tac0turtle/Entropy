@@ -12,7 +12,7 @@
 - [Flow Diagrams](./spec/flow.md)
 - [Insurance](./spec/insurnace.md)
 - [Liquidation](./spec/liquidation.md)
-- [Staking](./spec/staking/md)
+- [Staking](./spec/staking.md)
 - [Governannce](./spec/governance.md)
 
 ## Overview
