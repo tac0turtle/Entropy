@@ -1,7 +1,7 @@
 #![feature(proc_macro_hygiene)]
 
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, TokenAccount};
+use anchor_spl::token::{self, TokenAccount, Transfer};
 use solana_program::program::{invoke, invoke_signed};
 
 #[program]
@@ -190,15 +190,28 @@ pub mod margin_account {
         Ok(())
     }
     /// Withdraw funds from an obligation account.
-    pub fn withdraw(_ctx: Context<Withdraw>) -> ProgramResult {
-        // TODO
-        Ok(())
-    }
-    /// Liquidate a position if below liquidation price.
-    //? This potentially isn't needed, if the logic can happen on the lending pool (obligation
-    //? account) but for now it's assumed the transaction will have to go through here.
-    pub fn liquidate(_ctx: Context<Liquidate>) -> ProgramResult {
-        // TODO
+    pub fn withdraw(ctx: Context<Withdraw>, amount: u64) -> ProgramResult {
+        if amount == 0 {
+            return Err(ErrorCode::InvalidAmount.into());
+        };
+        let margin_account = &mut ctx.accounts.margin_account;
+        let position = margin_account
+            .position
+            .as_ref()
+            .ok_or(ErrorCode::WithdrawDisabled)?;
+        if matches!(position.status, Status::Locked) {
+            return Err(ErrorCode::WithdrawDisabled.into());
+        }
+
+        // Transfer funds from collateral vault, if any to the user
+        let seeds = &[
+            margin_account.to_account_info().key.as_ref(),
+            &[ctx.accounts.margin_account.nonce],
+        ];
+        let signer = &[&seeds[..]];
+        let cpi_ctx = CpiContext::from(&*ctx.accounts).with_signer(signer);
+        token::transfer(cpi_ctx, amount)?;
+
         Ok(())
     }
 }
@@ -239,11 +252,28 @@ pub struct Withdraw<'info> {
     // Authority (trader)
     #[account(signer)]
     authority: AccountInfo<'info>,
+    user_token_account: AccountInfo<'info>,
+    #[account(mut)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
+    #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
+    vault_signer: AccountInfo<'info>,
     // Misc.
     #[account("token_program.key == &token::ID")]
     token_program: AccountInfo<'info>,
+}
+
+impl<'a, 'b, 'c, 'info> From<&Withdraw<'info>> for CpiContext<'a, 'b, 'c, 'info, Transfer<'info>> {
+    fn from(accounts: &Withdraw<'info>) -> CpiContext<'a, 'b, 'c, 'info, Transfer<'info>> {
+        let cpi_accounts = Transfer {
+            from: accounts.vault.to_account_info(),
+            to: accounts.user_token_account.to_account_info(),
+            authority: accounts.vault_signer.to_account_info(),
+        };
+        let cpi_program = accounts.token_program.to_account_info();
+        CpiContext::new(cpi_program, cpi_accounts)
+    }
 }
 
 // TradeAMM takes the tokens that are in the margin account and executes a trade with them.
@@ -351,11 +381,6 @@ pub struct Borrow<'info> {
     #[account(mut)]
     margin_account: ProgramAccount<'info, MarginAccount>,
 }
-#[derive(Accounts)]
-pub struct Liquidate<'info> {
-    // TODO
-    authority: AccountInfo<'info>,
-}
 
 /// Margin account state which keeps track of positions opened for a given trader.
 #[account]
@@ -369,7 +394,7 @@ pub struct MarginAccount {
 }
 
 /// Track margin account position.
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct Position {
     /// Tracks the size of the loan to know if the amount being paid back is the total amount in order to unlock the account
     pub loan_amount: u64,
@@ -384,16 +409,10 @@ pub struct Position {
     pub status: Status,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq)]
 pub enum Status {
     Locked,
     Available,
-}
-
-impl Default for Status {
-    fn default() -> Status {
-        Status::Available
-    }
 }
 
 #[error]
@@ -406,4 +425,6 @@ pub enum ErrorCode {
     InvalidAmount,
     #[msg("loan has been taken out fo this account")]
     AccountInUse,
+    #[msg("unable to withdraw from account")]
+    WithdrawDisabled,
 }
