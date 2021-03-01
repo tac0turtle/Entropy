@@ -31,23 +31,28 @@ pub struct MarginAccount {
     pub trader: Pubkey,
     /// Open positions held by the margin account.
     pub positions: Vec<Position>,
+
+    /// nonce for program derived address
+    pub nonce: u8,
 }
 ```
 
+Which contains positions opened by the trader.
+
 ```rust
-// Position holds a store of two token denominations (or mints). One for the deonomination that the loan is in
-// and the other for the denomination that the trade or collateral is in.
+/// Tracks position opened my margin account.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
 pub struct Position {
-    // This account holds tokens from the loan before they are used in the trade and conversely to hold
-    // tokens after closing the position and before repaying the loan. 
-    pub loan_denominated_tokens: PubKey,
-
-    // Tokens are stored here when a position is opened (status becomes locked). When the loan is repayed,
-    // status is updated to available and the trader is able to withdraw the tokens.
-    pub collateral_denominated_tokens: PubKey,
-
-    // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
-    // status is updated to available indicating that the trader can now withdraw the tokens.
+    /// Tracks the size of the loan to know if the amount being paid back is the total amount in order to unlock the account
+    pub loan_amount: u64,
+    /// This account holds tokens from the loan before they are used in the trade and conversely to hold
+    /// tokens after closing the position and before repaying the loan.
+    pub loaned_vault: Pubkey,
+    /// Tokens are stored here when a position is opened (status becomes locked). When the loan is repaid,
+    /// status is updated to available and the trader is able to withdraw the tokens.
+    pub collateral_vault: Option<Pubkey>,
+    /// When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
+    /// status is updated to available indicating that the trader can now withdraw the tokens.
     pub status: Status,
 }
 
@@ -62,21 +67,22 @@ pub enum Status {
 The margin contract is comprised of 6 possible actions, each of which can be broken down into a set of transactions. Initially we will look at this from the perspective of using an AMM with which to perform trades.
 See [using an orderbook](##-Using-An-Orderbook) for how the same process could be applied with an order book.
 
-### Create Account
+### Initialize Account
 
-Create Account has a single transaction, `InitializeAccount` which creates a margin account on behalf of the caller.
+Initialize Account has a single transaction, `InitializeAccount` which creates a margin account on behalf of the caller.
 
 ```rust
 #[derive(Accounts)]
-pub struct InitializeAccount<'info> {
+pub struct Initialize<'info> {
     #[account(init)]
     margin_account: ProgramAccount<'info, MarginAccount>,
+    rent: Sysvar<'info, Rent>,
 }
 ```
 
-### Deposit
+### Init Obligation
 
-Deposits funds into an obligation account to be used to open a leveraged trade. This calls [`InitObligation`](./lending.md).
+Deposits funds into an obligation account to be used to open a leveraged trade.
 
 - Can only be called by the trader.
 - Deposits of the same denomination will continue to create new obligation accounts as it's not possible to add more funds into an existing account
@@ -85,15 +91,29 @@ Deposits funds into an obligation account to be used to open a leveraged trade. 
 
 ```rust
 #[derive(Accounts)]
-pub struct Deposit<'info> {
-    // TODO
-    #[account(signer)]
-    authority: AccountInfo<'info>,
-    vault: TokenAccount<'info>,
+pub struct InitObligation<'info> {
+    lending_program: AccountInfo<'info>,
+    deposit_reserve: AccountInfo<'info>,
+    borrow_reserve: AccountInfo<'info>,
+    #[account(mut)]
+    obligation: AccountInfo<'info>,
+    #[account(mut)]
+    obligation_token_mint: AccountInfo<'info>,
+    #[account(mut)]
+    obligation_token_output: AccountInfo<'info>,
+    obligation_token_owner: AccountInfo<'info>,
+    lending_market: AccountInfo<'info>,
+    lending_market_authority: AccountInfo<'info>,
+
+    clock: Sysvar<'info, Clock>,
+    rent: Sysvar<'info, Rent>,
+    #[account("token_program.key == &token::ID")]
+    token_program: AccountInfo<'info>,
 }
+
 ```
 
-### OpenPosition
+### Borrow
 
 Opens a leveraged position through the lending pool. This will use the collateral to allow a non-backed loan of the complementary token of the pair. These tokens will be exchanged through the Serum DEX or AMM to the token denomination of the leveraged position. The action consists of a borrow transaction followed by either an order through an Orderbook or an AMM.
 
@@ -106,36 +126,86 @@ Opens a leveraged position through the lending pool. This will use the collatera
 ```rust
 #[derive(Accounts)]
 pub struct Borrow<'info> {
-    // TODO
+    lending_program: AccountInfo<'info>,
+    #[account(mut)]
+    source_collateral: AccountInfo<'info>,
+    deposit_reserve: AccountInfo<'info>,
+    #[account(mut)]
+    deposit_reserve_collateral_supply: AccountInfo<'info>,
+    #[account(mut)]
+    deposit_reserve_collateral_fees_receiver: AccountInfo<'info>,
+    #[account(mut)]
+    borrow_reserve: AccountInfo<'info>,
+    #[account(mut)]
+    borrow_reserve_liquidity_supply: AccountInfo<'info>,
+    lending_market: AccountInfo<'info>,
+    lending_market_authority: AccountInfo<'info>,
+    obligation: AccountInfo<'info>,
+    obligation_token_mint: AccountInfo<'info>,
+    obligation_token_output: AccountInfo<'info>,
+    memory: AccountInfo<'info>,
+    dex_market: AccountInfo<'info>,
+    dex_market_order_book_side: AccountInfo<'info>,
+
+    /// User transfer authority
+    #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
+    vault_signer: AccountInfo<'info>,
+    #[account(mut)]
+    loaned_vault: CpiAccount<'info, TokenAccount>,
+    #[account(mut)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
 }
 ```
 
-2. Open Position via AMM - This takes the funds from the margin account (specifically `loan_denominated_tokens`) and performs an AMM trade. Traded tokens are placed directly back into the same address i.e. they remain locked.
+2. Open Position/trade via AMM - This takes the funds from the margin account (specifically `loan_denominated_tokens`) and performs an AMM trade. Traded tokens are placed directly back into the same address i.e. they remain locked.
 
 - Can only be called by the trader.
 
 ```rust
 #[derive(Accounts)]
-pub struct OpenPositionAMM<'info> {
-    // TODO
+pub struct TradeAmm<'info> {
+    #[account(signer)]
+    trader: AccountInfo<'info>,
+    /// accounts needed to call
+    swap_program: AccountInfo<'info>,
+    swap_info: AccountInfo<'info>,
+    swap_authority: AccountInfo<'info>,
+    #[account(mut)]
+    source: AccountInfo<'info>,
+    #[account(mut)]
+    swap_source: AccountInfo<'info>,
+    #[account(mut)]
+    swap_dest: AccountInfo<'info>,
+    #[account(mut)]
+    pool_mint: AccountInfo<'info>,
+    #[account(mut)]
+    pool_fee: AccountInfo<'info>,
+    host_fee: AccountInfo<'info>,
+    /// accounts needed to access funds from token vault
+    #[account(mut, has_one = trader)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
+    #[account(mut)]
+    source_vault: CpiAccount<'info, TokenAccount>,
+    #[account(mut)]
+    destination_vault: CpiAccount<'info, TokenAccount>,
+    #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
+    vault_signer: AccountInfo<'info>,
+
+    #[account("token_program.key == &token::ID")]
+    token_program: AccountInfo<'info>,
 }
 ```
 
-### ClosePosition
+### Repay
 
-Closes a position which was opened in `OpenPosition`. This will exchange tokens to cover the original loan plus accrued interest and move the remaining tokens into the margin account. This is perhaps the most complicated action.
+Closes a position which was opened in `Borrow`. This will exchange tokens to cover the original loan plus accrued interest and move the remaining tokens into the margin account. This is perhaps the most complicated action.
 
 1. Close Position via AMM - Calculates the total repayment sum in the loan denomination before trading this with the respective amount of the collateral denomination stored in `locked_tokens`. The funds are sent to the margin account.
 
 - Can only be called by the trader.
 - Repayment sum = loan + interest + buffer. We need to add a buffer here because we don't know when the `RepayLoan` call will be made
 
-```rust
-#[derive(Accounts)]
-pub struct ClosePositionAMM<'info> {
-    // TODO
-}
-```
+Call `TradeAmm` (listed above) to swap back into the loan denomination.
 
 2. Repay Loan Obligation - calls [`RepayReserveLiquidity`](./lending.md) to send repayment funds from the margin account back into the lending reserve. If this is less than the total amount, then the repayment will trigger the liquidation of the obligation account.
 
@@ -144,20 +214,42 @@ pub struct ClosePositionAMM<'info> {
 
 ```rust
 #[derive(Accounts)]
-pub struct RepayLoan<'info> {
-    // TODO
-}
-```
+pub struct Repay<'info> {
+    lending_program: AccountInfo<'info>,
+    /// Account which is repaying the loan.
+    #[account(mut)]
+    source_liquidity_acc: AccountInfo<'info>,
+    /// This account specifies where to send the obligation account after repay
+    #[account(mut)]
+    destination_coll_account: AccountInfo<'info>,
+    #[account(mut)]
+    repay_reserve_account: AccountInfo<'info>,
+    #[account(mut)]
+    repay_reserve_spl_acccount: AccountInfo<'info>,
+    withdraw_reserve: AccountInfo<'info>,
+    /// User token account to withdraw obligation to
+    #[account(mut)]
+    withdraw_reserve_collateral: AccountInfo<'info>,
+    #[account(mut)]
+    obligation: AccountInfo<'info>,
+    #[account(mut)]
+    obligation_mint: AccountInfo<'info>,
+    #[account(mut)]
+    obligation_input: AccountInfo<'info>,
+    lending_market: AccountInfo<'info>,
+    derived_lending_authority: AccountInfo<'info>,
 
-3. Settle Funds - Once the loan has been payed, any remaining tokens within the obligation account can be transfered back to the margin account (specifically `collateral_denominated_tokens`).
+    /// Loan vault are the tokens that will be used to repay the loan.
+    #[account(mut)]
+    loan_vault: CpiAccount<'info, TokenAccount>,
 
-- Can only be called by the trader.
-
-```rust
-#[derive(Accounts)]
-pub struct SettleFunds<'info> {
-    // TODO
-    pub obligation_account: PubKey,
+    #[account(mut)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
+    #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
+    vault_signer: AccountInfo<'info>,
+    #[account("token_program.key == &token::ID")]
+    token_program: AccountInfo<'info>,
+    clock: Sysvar<'info, Clock>,
 }
 ```
 
@@ -168,13 +260,16 @@ pub struct SettleFunds<'info> {
 ```rust
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
-    // Depositor
-    depositor: AccountInfo<'info>,
-    // Authority (trader)
+    /// Authority (trader)
     #[account(signer)]
-    depositor_authority: AccountInfo<'info>,
+    authority: AccountInfo<'info>,
+    user_token_account: AccountInfo<'info>,
+    #[account(mut)]
+    margin_account: ProgramAccount<'info, MarginAccount>,
     #[account(mut)]
     vault: CpiAccount<'info, TokenAccount>,
+    #[account(seeds = [margin_account.to_account_info().key.as_ref(), &[margin_account.nonce]])]
+    vault_signer: AccountInfo<'info>,
     // Misc.
     #[account("token_program.key == &token::ID")]
     token_program: AccountInfo<'info>,
@@ -185,7 +280,7 @@ pub struct Withdraw<'info> {
 
 Liquidate is only performed when an account has hit their liquidation limit. This replicates much of the functionality as closing a position would but rather than only being executed by the trader, these calls can be executed by anyone.
 
-1. Liquidate Position - wraps around `ClosePositionAMM`
+1. Liquidate Position - requires swap with `TradeAmm`
 
 - Can be called by anyone.
 - Check's [liquidation limit](./liquidation.md) has been reached

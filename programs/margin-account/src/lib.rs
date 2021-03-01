@@ -227,7 +227,6 @@ pub struct InitObligation<'info> {
     lending_market: AccountInfo<'info>,
     lending_market_authority: AccountInfo<'info>,
 
-    //? These may not be needed, but missing an account on CPI call
     clock: Sysvar<'info, Clock>,
     rent: Sysvar<'info, Rent>,
     #[account("token_program.key == &token::ID")]
@@ -236,7 +235,7 @@ pub struct InitObligation<'info> {
 
 #[derive(Accounts)]
 pub struct Withdraw<'info> {
-    // Authority (trader)
+    /// Authority (trader)
     #[account(signer)]
     authority: AccountInfo<'info>,
     #[account(mut)]
@@ -246,7 +245,7 @@ pub struct Withdraw<'info> {
     token_program: AccountInfo<'info>,
 }
 
-// TradeAMM takes the tokens that are in the margin account and executes a trade with them.
+/// TradeAMM takes the tokens that are in the margin account and executes a trade with them.
 #[derive(Accounts)]
 pub struct TradeAmm<'info> {
     #[account(signer)]
@@ -321,7 +320,6 @@ pub struct Repay<'info> {
 
 #[derive(Accounts)]
 pub struct Borrow<'info> {
-    // specify the correct lending program
     lending_program: AccountInfo<'info>,
     #[account(mut)]
     source_collateral: AccountInfo<'info>,
@@ -368,19 +366,19 @@ pub struct MarginAccount {
     pub nonce: u8,
 }
 
-/// Track margin account position.
+/// Tracks position opened my margin account.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
 pub struct Position {
     /// Tracks the size of the loan to know if the amount being paid back is the total amount in order to unlock the account
     pub loan_amount: u64,
-    // This account holds tokens from the loan before they are used in the trade and conversely to hold
-    // tokens after closing the position and before repaying the loan.
+    /// This account holds tokens from the loan before they are used in the trade and conversely to hold
+    /// tokens after closing the position and before repaying the loan.
     pub loaned_vault: Pubkey,
-    // Tokens are stored here when a position is opened (status becomes locked). When the loan is repaid,
-    // status is updated to available and the trader is able to withdraw the tokens.
+    /// Tokens are stored here when a position is opened (status becomes locked). When the loan is repaid,
+    /// status is updated to available and the trader is able to withdraw the tokens.
     pub collateral_vault: Option<Pubkey>,
-    // When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
-    // status is updated to available indicating that the trader can now withdraw the tokens.
+    /// When a position is open, status is locked meaning funds can't be withdrawn. Once a position is closed out,
+    /// status is updated to available indicating that the trader can now withdraw the tokens.
     pub status: Status,
 }
 
