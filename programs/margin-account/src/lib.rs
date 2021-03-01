@@ -199,7 +199,7 @@ pub mod margin_account {
             .position
             .as_ref()
             .ok_or(ErrorCode::WithdrawDisabled)?;
-        if matches!(position.status, Status::Locked) {
+        if position.status == Status::Locked {
             return Err(ErrorCode::WithdrawDisabled.into());
         }
 
