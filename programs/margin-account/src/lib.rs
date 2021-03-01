@@ -199,7 +199,6 @@ pub mod margin_account {
             .position
             .as_mut()
             .ok_or(ErrorCode::WithdrawDisabled)?;
-        let cv = position.collateral_vault.as_mut().unwrap();
         if position.status == Status::Locked {
             return Err(ErrorCode::WithdrawDisabled.into());
         }
