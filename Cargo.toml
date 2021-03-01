@@ -1,6 +1,5 @@
 [workspace]
 members = [
     "programs/*",
-    "token-lending/program",
-    "token-lending/client",
+    "lending-client",
 ]

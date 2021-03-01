@@ -11,5 +11,5 @@ edition = "2018"
 solana-client = "1.5.0"
 solana-program = "1.5.0"
 solana-sdk = "1.5.0"
-spl-token-lending = { path = "../program", features = [ "no-entrypoint" ] }
+spl-token-lending = { path = "../programs/token-lending", features = [ "no-entrypoint" ] }
 spl-token = {  version = "3.0.1", features = [ "no-entrypoint" ] }
