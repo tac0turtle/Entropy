@@ -20,18 +20,22 @@ Open starts with a user setting a leverage level, borrows the funds needed, then
 
 ## Close
 
-Close begins with first creating a new order on the serum dex to close the open trade.
+Close begins with first swapping the tokens in the margin account to repay the loan with interest. Then, the swapped tokens are repaid to the liquidity provider.
+
+<TODO Update flow>
 
 ![Close](./assets/close.png)
 
 ## Withdraw
 
-Withdraw settles the funds by calling the settle function on the serum dex. Once it has received the funds it will repay the loan. In the process of repaying the loan, if in the profit, the obligation will be sent to the user.
+Withdraw is called by the trader, allowing them to withdraw the funds put into an obligation account.
+
+<TODO Update flow>
 
 ![Withdraw](./assets/withdraw.png)
 
 ## Liquidate
 
-When an open trade is not making a profit it will be losing money. At a certain point, decided by the protocol, a liquidation bot will notice the account reaching a point where the collateral will not be enough. At this time it will begin the liquidation process, which sells off some of the obligation in order to repay the loan. 
+When an open trade is not making a profit it will be losing money. At a certain threshold, decided by the protocol, a liquidation bot will notice the account reaching a point where the collateral will not be enough. At this time it will begin the liquidation process, which sells off some of the obligation in order to repay the loan. 
 
 ![Liquidate](./assets/liquidate.png)
