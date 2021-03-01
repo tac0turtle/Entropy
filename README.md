@@ -1,18 +1,17 @@
 <div align="center">
 
-![entropy image](entropy.jpg)
+![entropy image](entropy.svg)
 
 </div>
-
-A Margin Trading Protocol on Solana.
 
 ## Contents
 
 - [An Introduction to Margin Trading](./spec/introduction.md)
 - [Margin Accounts](./spec/margin.md)
 - [Lending Pool](./spec/lending.md)
+- [Flow Diagrams](./spec/flow.md)
 - [Insurance](./spec/insurnace.md)
-- [liquidation](./spec/liquidation.md)
+- [Liquidation](./spec/liquidation.md)
 - [Staking](./spec/staking/md)
 - [Governannce](./spec/governance.md)
 
