@@ -144,10 +144,10 @@ impl Obligation {
             .ok_or(LendingError::MathOverflow)?;
 
         Ok(RepayResult {
-            decimal_repay_amount,
-            integer_repay_amount,
             collateral_withdraw_amount,
             obligation_token_amount,
+            decimal_repay_amount,
+            integer_repay_amount,
         })
     }
 }

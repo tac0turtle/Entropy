@@ -1461,6 +1461,14 @@ fn assert_last_update_slot(reserve: &Reserve, slot: Slot) -> ProgramResult {
 fn assert_uninitialized<T: Pack + IsInitialized>(
     account_info: &AccountInfo,
 ) -> Result<T, ProgramError> {
+    if account_info.data.borrow().len() != T::LEN {
+        // TODO remove after, hack to get account sizes equal in tests
+        solana_program::msg!(&format!(
+            "size: {}, expected: {}",
+            account_info.data.borrow().len(),
+            T::LEN,
+        ));
+    }
     let account: T = T::unpack_unchecked(&account_info.data.borrow())?;
     if account.is_initialized() {
         Err(LendingError::AlreadyInitialized.into())
