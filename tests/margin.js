@@ -109,7 +109,7 @@ describe("margin-account", () => {
     assert.ok(marginProgram.trader.equals(provider.wallet.publicKey));
   });
 
-  it("Initializes obligation account", async () => {
+  it.skip("Initializes obligation account", async () => {
     // Create transaction to create all accounts (need to avoid tx limit)
     let tx = new anchor.web3.Transaction();
     let create_signers = []
