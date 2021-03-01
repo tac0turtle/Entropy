@@ -114,6 +114,8 @@ describe("margin-account", () => {
     let tx = new anchor.web3.Transaction();
     let create_signers = []
 
+    const transferAuthority = new anchor.web3.Account();
+
     // Setup lending market for reserves
     const lendingMarket = new anchor.web3.Account();
     create_signers.push(lendingMarket);
@@ -132,7 +134,6 @@ describe("margin-account", () => {
     tx = new anchor.web3.Transaction();
     create_signers = []
 
-
     let [
       _lendingMarketAuthority,
     ] = await anchor.web3.PublicKey.findProgramAddress(
@@ -144,6 +145,7 @@ describe("margin-account", () => {
     // Initialize reserves
     const depositReserve = new anchor.web3.Account();
     create_signers.push(depositReserve);
+    create_signers.push(transferAuthority);
     tx.add(await createSolAccountInstruction(depositReserve, provider, lendingProgram, 602, provider.wallet.publicKey));
 
     tx.add(initReserveInstruction(
@@ -158,8 +160,8 @@ describe("margin-account", () => {
       collateralFeesReceiver, // col output (init)
       lendingMarket.publicKey, // lending market
       provider.wallet.publicKey, // lending market owner
-      lendingMarketAuthority, // lending market auth
-      provider.wallet.publicKey, // transferauth
+      provider.wallet.publicKey, // lending market auth
+      transferAuthority.publicKey, // transferauth
       lendingProgram, // Lending program
     ),
     );
@@ -187,7 +189,7 @@ describe("margin-account", () => {
       liquidityFeesReceiver, // col output (init)
       lendingMarket.publicKey, // lending market
       provider.wallet.publicKey, // lending market owner
-      lendingMarketAuthority, // lending market auth
+      provider.wallet.publicKey, // lending market auth
       provider.wallet.publicKey, // transferauth
       lendingProgram, // Lending program
     ),
