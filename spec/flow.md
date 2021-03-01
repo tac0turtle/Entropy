@@ -22,15 +22,11 @@ Open starts with a user setting a leverage level, borrows the funds needed, then
 
 Close begins with first swapping the tokens in the margin account to repay the loan with interest. Then, the swapped tokens are repaid to the liquidity provider.
 
-<TODO Update flow>
-
 ![Close](./assets/close.png)
 
 ## Withdraw
 
 Withdraw is called by the trader, allowing them to withdraw the funds put into an obligation account.
-
-<TODO Update flow>
 
 ![Withdraw](./assets/withdraw.png)
 
