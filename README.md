@@ -1,6 +1,6 @@
 <div align="center">
 
-![entropy image](entropy.png)
+![entropy image](entropy.svg)
 
 </div>
 
