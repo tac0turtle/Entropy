@@ -88,6 +88,26 @@ describe("margin-account", () => {
   // const vault = new anchor.web3.Account();
   let marginProgram = null
 
+  it("Initializes margin program state", async () => {
+    let accounts = {
+      authority: provider.wallet.publicKey,
+    };
+
+    await program.state.rpc.new({ accounts });
+    await program.state.rpc.clearPairs({ accounts });
+
+    let state = await program.state();
+    assert.ok(state.authority.equals(provider.wallet.publicKey));
+    assert.ok(state.tokenPairs.length == 0);
+
+    // Add token pair used for test
+    await program.state.rpc.addTokenPair(collateralMint, liquidityMint, { accounts });
+    state = await program.state();
+    assert.ok(state.tokenPairs.length === 1);
+    assert.ok(state.tokenPairs[0].firstToken.equals(collateralMint));
+    assert.ok(state.tokenPairs[0].secondToken.equals(liquidityMint));
+  });
+
   it("Initializes margin account", async () => {
     // Arbitrary size for now, just need it to be large enough
     const marginSize = 600;
