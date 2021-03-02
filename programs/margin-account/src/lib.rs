@@ -206,6 +206,13 @@ pub mod margin_account {
     }
 
     pub fn borrow(ctx: Context<Borrow>, loan_amount: u64, collateral_amount: u64) -> ProgramResult {
+        let token_pair = TokenPair {
+            first_token: *ctx.accounts.obligation_token_mint.key,
+            second_token: ctx.accounts.deposit_reserve_collateral_supply.mint,
+        };
+        if index_of_token_pair(&ctx.accounts.state.token_pairs, &token_pair).is_none() {
+            return Err(ErrorCode::InvalidTokenPair.into());
+        }
         if loan_amount == 0 || collateral_amount == 0 {
             return Err(ErrorCode::InvalidAmount.into());
         };
@@ -223,7 +230,10 @@ pub mod margin_account {
             *ctx.accounts.source_collateral.key,
             *ctx.accounts.loaned_vault.to_account_info().key,
             *ctx.accounts.deposit_reserve.key,
-            *ctx.accounts.deposit_reserve_collateral_supply.key,
+            *ctx.accounts
+                .deposit_reserve_collateral_supply
+                .to_account_info()
+                .key,
             *ctx.accounts.deposit_reserve_collateral_fees_receiver.key,
             *ctx.accounts.borrow_reserve.key,
             *ctx.accounts.borrow_reserve_liquidity_supply.key,
@@ -419,12 +429,13 @@ pub struct Repay<'info> {
 
 #[derive(Accounts)]
 pub struct Borrow<'info> {
+    state: ProgramState<'info, State>,
     lending_program: AccountInfo<'info>,
     #[account(mut)]
     source_collateral: AccountInfo<'info>,
     deposit_reserve: AccountInfo<'info>,
     #[account(mut)]
-    deposit_reserve_collateral_supply: AccountInfo<'info>,
+    deposit_reserve_collateral_supply: CpiAccount<'info, TokenAccount>,
     #[account(mut)]
     deposit_reserve_collateral_fees_receiver: AccountInfo<'info>,
     #[account(mut)]
