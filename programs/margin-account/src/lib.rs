@@ -29,7 +29,8 @@ pub mod margin_account {
             })
         }
 
-        /// Should only be used as a temp function, state restricts
+        /// Should only be used as a temp function, state restricts from initializing with custom
+        /// size, so need to clear after initializing with default.
         #[access_control(whitelist_auth(self, &ctx))]
         pub fn clear_pairs(&mut self, ctx: Context<Auth>) -> Result<()> {
             self.token_pairs.clear();
