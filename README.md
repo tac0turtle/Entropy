@@ -23,4 +23,4 @@ In this margin trade, a trader puts collateral into an obligation account and bo
 
 The trader can increase the amount of leverage, which increases the amount borrowed and swapped, but means the position can be liquidated if the price drops by a smaller amount. Liquidation can be triggered by any user on the network once the collateral and swapped tokens drops below the amount needed to swap and repay the loan with interest after slippage.
 
-The protocol includes lending pools, margin accounts, liquidation bots, an insurance fund and finally a governance mechanism. This is all wrapped up in a UI designed for ease of use.
+The protocol is built on [Solana](https://solana.com/) and includes lending pools, margin accounts, liquidation bots, an insurance fund and finally a governance mechanism. This is all wrapped up in a UI designed for ease of use.

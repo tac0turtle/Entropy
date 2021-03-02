@@ -8,6 +8,76 @@ use solana_program::program::{invoke, invoke_signed};
 pub mod margin_account {
     use super::*;
 
+    #[state]
+    pub struct State {
+        /// The key with the ability to change the token pairs whitelist.
+        pub authority: Pubkey,
+        /// List of token pairs allowed for margin trading. This allows the user to whitelist
+        /// which tokens can be traded against.
+        pub token_pairs: Vec<TokenPair>,
+    }
+
+    impl State {
+        pub const MAX_TOKEN_PAIRS: usize = 10;
+
+        pub fn new(ctx: Context<Auth>) -> Result<Self> {
+            // init with default to set account size
+            let token_pairs = vec![Default::default(); Self::MAX_TOKEN_PAIRS];
+            Ok(State {
+                authority: *ctx.accounts.authority.key,
+                token_pairs,
+            })
+        }
+
+        /// Should only be used as a temp function, state restricts from initializing with custom
+        /// size, so need to clear after initializing with default.
+        #[access_control(whitelist_auth(self, &ctx))]
+        pub fn clear_pairs(&mut self, ctx: Context<Auth>) -> Result<()> {
+            self.token_pairs.clear();
+            Ok(())
+        }
+
+        /// Adds token pair to whitelist.
+        #[access_control(whitelist_auth(self, &ctx))]
+        pub fn add_token_pair(
+            &mut self,
+            ctx: Context<Auth>,
+            first_token: Pubkey,
+            second_token: Pubkey,
+        ) -> Result<()> {
+            let entry = TokenPair {
+                first_token,
+                second_token,
+            };
+            if self.token_pairs.len() == Self::MAX_TOKEN_PAIRS {
+                return Err(ErrorCode::MaxTokenPairs.into());
+            }
+            if index_of_token_pair(&self.token_pairs, &entry).is_some() {
+                return Err(ErrorCode::TokenPairAlreadyExists.into());
+            }
+            self.token_pairs.push(entry);
+            Ok(())
+        }
+
+        /// Removes token pair from whitelist.
+        #[access_control(whitelist_auth(self, &ctx))]
+        pub fn remove_token_pair(&mut self, ctx: Context<Auth>, entry: TokenPair) -> Result<()> {
+            if let Some(idx) = index_of_token_pair(&self.token_pairs, &entry) {
+                self.token_pairs.remove(idx);
+                Ok(())
+            } else {
+                Err(ErrorCode::InvalidTokenPair.into())
+            }
+        }
+
+        /// Update authority allowed to modify token pair whitelist.
+        #[access_control(whitelist_auth(self, &ctx))]
+        pub fn set_authority(&mut self, ctx: Context<Auth>, new_authority: Pubkey) -> Result<()> {
+            self.authority = new_authority;
+            Ok(())
+        }
+    }
+
     /// Initialize new margin account under a specific trader's address.
     pub fn initialize(ctx: Context<Initialize>, trader: Pubkey, nonce: u8) -> ProgramResult {
         let margin_account = &mut ctx.accounts.margin_account;
@@ -137,6 +207,13 @@ pub mod margin_account {
     }
 
     pub fn borrow(ctx: Context<Borrow>, loan_amount: u64, collateral_amount: u64) -> ProgramResult {
+        let token_pair = TokenPair {
+            first_token: *ctx.accounts.obligation_token_mint.key,
+            second_token: ctx.accounts.deposit_reserve_collateral_supply.mint,
+        };
+        if index_of_token_pair(&ctx.accounts.state.token_pairs, &token_pair).is_none() {
+            return Err(ErrorCode::InvalidTokenPair.into());
+        }
         if loan_amount == 0 || collateral_amount == 0 {
             return Err(ErrorCode::InvalidAmount.into());
         };
@@ -154,7 +231,10 @@ pub mod margin_account {
             *ctx.accounts.source_collateral.key,
             *ctx.accounts.loaned_vault.to_account_info().key,
             *ctx.accounts.deposit_reserve.key,
-            *ctx.accounts.deposit_reserve_collateral_supply.key,
+            *ctx.accounts
+                .deposit_reserve_collateral_supply
+                .to_account_info()
+                .key,
             *ctx.accounts.deposit_reserve_collateral_fees_receiver.key,
             *ctx.accounts.borrow_reserve.key,
             *ctx.accounts.borrow_reserve_liquidity_supply.key,
@@ -350,12 +430,13 @@ pub struct Repay<'info> {
 
 #[derive(Accounts)]
 pub struct Borrow<'info> {
+    state: ProgramState<'info, State>,
     lending_program: AccountInfo<'info>,
     #[account(mut)]
     source_collateral: AccountInfo<'info>,
     deposit_reserve: AccountInfo<'info>,
     #[account(mut)]
-    deposit_reserve_collateral_supply: AccountInfo<'info>,
+    deposit_reserve_collateral_supply: CpiAccount<'info, TokenAccount>,
     #[account(mut)]
     deposit_reserve_collateral_fees_receiver: AccountInfo<'info>,
     #[account(mut)]
@@ -413,16 +494,60 @@ pub enum Status {
     Available,
 }
 
+/// Pair of token key mints to trade.
+/// This is only a struct for now for anchor js interfacing, only allows named structs.
+// * This should probably be serialized as an array
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Default)]
+pub struct TokenPair {
+    first_token: Pubkey,
+    second_token: Pubkey,
+}
+
+#[derive(Accounts)]
+pub struct Auth<'info> {
+    #[account(signer)]
+    authority: AccountInfo<'info>,
+}
+
+fn whitelist_auth(state: &State, ctx: &Context<Auth>) -> Result<()> {
+    if &state.authority != ctx.accounts.authority.key {
+        return Err(ErrorCode::StateUnauthorized.into());
+    }
+    Ok(())
+}
+
+/// Validates that token pair exists in whitelist.
+fn index_of_token_pair(pairs: &[TokenPair], check: &TokenPair) -> Option<usize> {
+    let TokenPair {
+        first_token: t1,
+        second_token: t2,
+    } = check;
+    pairs.iter().position(
+        |TokenPair {
+             first_token: c1,
+             second_token: c2,
+         }| { (t1 == c1 && t2 == c2) || (t1 == c2 && t2 == c1) },
+    )
+}
+
 #[error]
 pub enum ErrorCode {
     #[msg("Invalid program address. Did you provide the correct nonce?")]
     InvalidProgramAddress,
     #[msg("Invalid margin owner.")]
     InvalidVaultOwner,
-    #[msg("Amount has to be greater than 0")]
+    #[msg("Amount has to be greater than 0.")]
     InvalidAmount,
-    #[msg("loan has been taken out fo this account")]
+    #[msg("Loan has been taken out fo this account.")]
     AccountInUse,
-    #[msg("unable to withdraw from account")]
+    #[msg("Unable to withdraw from account.")]
     WithdrawDisabled,
+    #[msg("Unauthorized to update the program state.")]
+    StateUnauthorized,
+    #[msg("Cannot add token pair, program already has maximum.")]
+    MaxTokenPairs,
+    #[msg("Token pair does not exist in allowed set.")]
+    InvalidTokenPair,
+    #[msg("Token pair already exists.")]
+    TokenPairAlreadyExists,
 }
